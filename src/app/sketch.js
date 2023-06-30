@@ -66,6 +66,7 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
     const objLoader = new GLTFLoader(manager);
     objLoader.load((new URL('../assets/scene.glb', import.meta.url)).toString(), (gltf) => {
         glbScene = (gltf.scene)
+        console.log(glbScene);
     });
 
     manager.onLoad = () => {
@@ -159,16 +160,16 @@ function setupPhysicsScene() {
     brickMeshes = bricks.children;
     brickBodies = [];
     brickMeshes.forEach(mesh => {
-        console.log(mesh);
         mesh.geometry.computeBoundingBox();
         const brickBoundingBox = mesh.geometry.boundingBox;
         const dim = brickBoundingBox.max.sub(brickBoundingBox.min);
         dim.multiplyScalar(0.5);
+        console.log(dim);
 
         const brickBody = new CANNON.Body({
             mass: 1,
             shape: new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z)),
-            angularDamping: .95,
+            angularDamping: .94,
             linearDamping: 0.1
         });
         brickBody.position.copy(mesh.position);
@@ -187,9 +188,11 @@ function setupPhysicsScene() {
     world.defaultContactMaterial.contactEquationStiffness = 1e20
 
     // Stabilization time in number of timesteps
-    world.defaultContactMaterial.contactEquationRelaxation = 3
+    world.defaultContactMaterial.contactEquationRelaxation = 3;
 
     world.defaultContactMaterial.restitution = 0.1;
+    world.defaultContactMaterial.friction = 1;
+    world.defaultContactMaterial.frictionEquationStiffness = 1e10;
 
     // Joint body, to later constraint the cube
     const jointShape = new CANNON.Particle(0.1)
@@ -306,9 +309,9 @@ function animate() {
 
     world.step(TARGET_FRAME_DURATION_MS / 1000, deltaTimeMS / 500);
 
-    /*if (isDragging && dragSpring.bodyB) {
+    if (isDragging && dragSpring.bodyB) {
         dragSpring.applyForce();
-    }*/
+    }
 
     brickMeshes.forEach((mesh, ndx) => {
         const body = brickBodies[ndx];
@@ -368,7 +371,7 @@ function addJointConstraint(position, constrainedBody) {
     // Add the constraint to world
     world.addConstraint(jointConstraint)
 
-    dragSpring.bodyB = constrainedBody;
+    //dragSpring.bodyB = constrainedBody;
     dragSpring.localAnchorB = pivot;
 }
 
@@ -376,11 +379,12 @@ function addJointConstraint(position, constrainedBody) {
 // and updates the constraint
 function moveJoint(position, pointerPos) {
     const pointerDelta = pointerPos.sub(pointerDownPos);
-    const pY = pointerDelta.y * 2.5;
+    const pY = pointerDelta.y * 2;
     const zOffset = pY * pY * pY;
     position.z -= zOffset;
 
-    boundingBox.clampPoint(position, position);
+    const bounds = boundingBox.clone();
+    bounds.clampPoint(position, position);
 
     jointBody.position.copy(position)
     jointConstraint.update()
