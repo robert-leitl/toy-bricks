@@ -16,6 +16,7 @@
   "dependencies": {
     "@loaders.gl/core": "^3.2.3",
     "@loaders.gl/gltf": "^3.2.3",
+    "cannon-es": "^0.20.0",
     "gl-matrix": "^3.4.3",
     "rxjs": "^7.5.6",
     "three": "^0.150.1",
