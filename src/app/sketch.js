@@ -16,6 +16,8 @@ import { Vector3 } from 'three';
 import { PlaneBufferGeometry } from 'three';
 import { Mesh } from 'three';
 import { PlaneGeometry } from 'three';
+import { Box3 } from 'three';
+import  './modernizr';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -48,9 +50,11 @@ var _isDev,
     glbScene,
     bricksContainer,
     brickMeshes,
-    movementPlane;
+    boundingBox,
+    movementPlane,
+    canvasRect;
 
-var world, brickBodies, isDragging = false, jointBody, jointConstraint;
+var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
 
 function init(canvas, onInit = null, isDev = false, pane = null) {
@@ -123,15 +127,33 @@ function setupPhysicsScene() {
     const floorMesh = glbScene.getObjectByName('floor');
     const floorBoundingBox = floorMesh.geometry.boundingBox;
 
-    const groundMaterial = new CANNON.Material('ground')
-    const groundBody = new CANNON.Body({
+    const boundingBoxSize = new Vector3(20, 20, 20);
+    boundingBox = new Box3(
+        new Vector3(-boundingBoxSize.x / 2, floorBoundingBox.max.y, -boundingBoxSize.z / 2),
+        new Vector3(boundingBoxSize.x / 2, floorBoundingBox.max.y + boundingBoxSize.y, boundingBoxSize.z / 2)
+    );
+    const boundingPlanes = new Array(6).fill(0).map(() => new CANNON.Body({
         type: CANNON.Body.STATIC,
-        shape: new CANNON.Plane(),
-        material: groundMaterial
-    })
-    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0) // make it face up
-    groundBody.position.set(floorMesh.position.x, floorMesh.position.y + floorBoundingBox.max.y, floorMesh.position.z);
-    world.addBody(groundBody)
+        shape: new CANNON.Plane()
+    }));
+    const bottomPlane = boundingPlanes[0];
+    bottomPlane.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    bottomPlane.position.set(0, boundingBox.min.y, 0);
+    const topPlane = boundingPlanes[1];
+    topPlane.quaternion.setFromEuler(Math.PI / 2, 0, 0);
+    topPlane.position.set(0, boundingBox.max.y, 0);
+    const leftPlane = boundingPlanes[2];
+    leftPlane.quaternion.setFromEuler(0, Math.PI / 2, 0);
+    leftPlane.position.set(boundingBox.min.x, 0, 0);
+    const rightPlane = boundingPlanes[3];
+    rightPlane.quaternion.setFromEuler(0, -Math.PI / 2, 0);
+    rightPlane.position.set(boundingBox.max.x, 0, 0);
+    const backPlane = boundingPlanes[4];
+    backPlane.position.set(0, 0, boundingBox.min.z);
+    const frontPlane = boundingPlanes[5];
+    frontPlane.quaternion.setFromEuler(Math.PI, 0, 0);
+    frontPlane.position.set(0, 0, boundingBox.max.z);
+    boundingPlanes.forEach(plane => world.addBody(plane));
 
     bricksContainer = bricks;
     brickMeshes = bricks.children;
@@ -146,9 +168,8 @@ function setupPhysicsScene() {
         const brickBody = new CANNON.Body({
             mass: 1,
             shape: new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z)),
-            material: groundMaterial,
             angularDamping: .95,
-            linearDamping: 0.2
+            linearDamping: 0.1
         });
         brickBody.position.copy(mesh.position);
         brickBody.quaternion.copy(mesh.quaternion);
@@ -157,19 +178,6 @@ function setupPhysicsScene() {
         brickBodies.push(brickBody);
         mesh.userData = { body: brickBody };
     });
-
-    // Adjust constraint equation parameters for ground/ground contact
-    /*const ground_ground = new CANNON.ContactMaterial(groundMaterial, groundMaterial, {
-        friction: 1.4,
-        restitution: 0.1,
-        contactEquationStiffness: 1e5,
-        contactEquationRelaxation: 3,
-        frictionEquationStiffness: 1e5,
-        frictionEquationRegularizationTime: 1,
-    });
-
-    // Add contact material to the world
-    world.addContactMaterial(ground_ground);*/
 
     // Max solver iterations: Use more for better force propagation, but keep in mind that it's not very computationally cheap!
     world.solver.iterations = 20
@@ -184,25 +192,52 @@ function setupPhysicsScene() {
     world.defaultContactMaterial.restitution = 0.1;
 
     // Joint body, to later constraint the cube
-    const jointShape = new CANNON.Sphere(0.1)
+    const jointShape = new CANNON.Particle(0.1)
     jointBody = new CANNON.Body({ mass: 0 })
     jointBody.addShape(jointShape)
     jointBody.collisionFilterGroup = 0
     jointBody.collisionFilterMask = 0
     world.addBody(jointBody)
 
+
+    dragSpring = new CANNON.Spring(jointBody, null, {
+        stiffness: 100,
+        restLength: 0,
+        damping: 8
+    });
+
     // init events
-    window.addEventListener('pointerdown', (e) => {
+    renderer.domElement.addEventListener(Modernizr.touchevents ? 'touchstart' : 'pointerdown', (e) => {
+        if (e.touches && e.touches.length > 1) return;
+
+        canvasRect = renderer.domElement.getBoundingClientRect();
+
+        let clientX, clientY;
+        if (Modernizr.touchevents) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+
+        clientX -= canvasRect.left;
+        clientY -= canvasRect.top;
+
         // Cast a ray from where the mouse is pointing and
         // see if we hit something
-        const intersection = getIntersection(e.clientX, e.clientY, bricksContainer, camera);
+        const intersection = getIntersection(clientX, clientY, bricksContainer, camera);
 
-        console.log(intersection);
+        console.log(canvasRect);
 
         // Return if the cube wasn't hit
         if (!intersection) {
           return
         }
+
+        pointerDownPos = new THREE.Vector2()
+        pointerDownPos.x = (clientX / renderer.domElement.clientWidth) * 2 - 1
+        pointerDownPos.y = -((clientY / renderer.domElement.clientHeight) * 2 - 1)
 
         // Move the movement plane on the z-plane of the hit
         moveMovementPlane(intersection.point, camera)
@@ -214,22 +249,31 @@ function setupPhysicsScene() {
         // movementPlane has had time to move
         requestAnimationFrame(() => {
           isDragging = true
-        })
-    });
-    window.addEventListener('pointermove', (e) => {
+        });
+
+        e.preventDefault();
+    }, { passive: false });
+    renderer.domElement.addEventListener('pointermove', (e) => {
         if (!isDragging) {
             return
-          }
-  
-          // Project the mouse onto the movement plane
-          const intersection = getIntersection(e.clientX, e.clientY, movementPlane, camera);
-  
-          if (intersection) {
+        }
+
+        let clientX = e.clientX - canvasRect.left;
+        let clientY = e.clientY - canvasRect.top;
+
+        // Project the mouse onto the movement plane
+        const intersection = getIntersection(clientX, clientY, movementPlane, camera);
+
+        if (intersection) {
+            const pointerPos = new THREE.Vector2()
+            pointerPos.x = (clientX / renderer.domElement.clientWidth) * 2 - 1
+            pointerPos.y = -((clientY / renderer.domElement.clientHeight) * 2 - 1)
+
             // Move the cannon constraint on the contact point
-            moveJoint(intersection.point)
-          }
+            moveJoint(intersection.point, pointerPos)
+        }
     });
-    window.addEventListener('pointerup', (e) => {
+    renderer.domElement.addEventListener('pointerup', (e) => {
         isDragging = false
 
         // Remove the mouse constraint from the world
@@ -262,6 +306,10 @@ function animate() {
 
     world.step(TARGET_FRAME_DURATION_MS / 1000, deltaTimeMS / 500);
 
+    /*if (isDragging && dragSpring.bodyB) {
+        dragSpring.applyForce();
+    }*/
+
     brickMeshes.forEach((mesh, ndx) => {
         const body = brickBodies[ndx];
         mesh.position.copy(body.position);
@@ -280,7 +328,6 @@ function moveMovementPlane(point, camera) {
 
     // Make it face toward the camera
     movementPlane.quaternion.copy(camera.quaternion);
-    movementPlane.rotation.x = -Math.PI / 4;
 }
 
 // Returns an hit point if there's a hit with the mesh,
@@ -288,8 +335,8 @@ function moveMovementPlane(point, camera) {
 function getIntersection(clientX, clientY, mesh, camera) {
     // Get 3D point form the client x y
     const mouse = new THREE.Vector2()
-    mouse.x = (clientX / window.innerWidth) * 2 - 1
-    mouse.y = -((clientY / window.innerHeight) * 2 - 1)
+    mouse.x = (clientX / renderer.domElement.clientWidth) * 2 - 1
+    mouse.y = -((clientY / renderer.domElement.clientHeight) * 2 - 1)
 
     // Get the picking ray from the point
     raycaster.setFromCamera(mouse, camera)
@@ -320,11 +367,21 @@ function addJointConstraint(position, constrainedBody) {
 
     // Add the constraint to world
     world.addConstraint(jointConstraint)
+
+    dragSpring.bodyB = constrainedBody;
+    dragSpring.localAnchorB = pivot;
 }
 
 // This functions moves the joint body to a new postion in space
 // and updates the constraint
-function moveJoint(position) {
+function moveJoint(position, pointerPos) {
+    const pointerDelta = pointerPos.sub(pointerDownPos);
+    const pY = pointerDelta.y * 2.5;
+    const zOffset = pY * pY * pY;
+    position.z -= zOffset;
+
+    boundingBox.clampPoint(position, position);
+
     jointBody.position.copy(position)
     jointConstraint.update()
 }
@@ -333,6 +390,7 @@ function moveJoint(position) {
 function removeJointConstraint() {
     world.removeConstraint(jointConstraint)
     jointConstraint = undefined
+    dragSpring.bodyB = null;
 }
 
 export default {
