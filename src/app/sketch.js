@@ -18,6 +18,7 @@ import { Mesh } from 'three';
 import { PlaneGeometry } from 'three';
 import { Box3 } from 'three';
 import  './modernizr';
+import { Matrix4 } from 'three';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -45,6 +46,9 @@ var _isDev,
     camera, 
     scene, 
     renderer, 
+    mainLight,
+    floorMesh,
+    bricksGroup,
     controls, 
     raycaster,
     glbScene,
@@ -52,6 +56,7 @@ var _isDev,
     brickMeshes,
     boundingBox,
     movementPlane,
+    sceneBox,
     canvasRect;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
@@ -66,7 +71,6 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
     const objLoader = new GLTFLoader(manager);
     objLoader.load((new URL('../assets/scene.glb', import.meta.url)).toString(), (gltf) => {
         glbScene = (gltf.scene)
-        console.log(glbScene);
     });
 
     manager.onLoad = () => {
@@ -81,25 +85,68 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
 }
 
 function setupScene(canvas) {
+    floorMesh = glbScene.getObjectByName('floor');
+    bricksGroup = glbScene.getObjectByName('bricks');
+
+    floorMesh.geometry.computeBoundingBox();
+    sceneBox = floorMesh.geometry.boundingBox.clone();
+    sceneBox.max.y = 10;
+
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
-    camera.position.set(0, 5, 20);
+    camera.position.set(0, 15, 30);
     camera.lookAt(new Vector3());
 
     scene = new THREE.Scene();
     scene.add(glbScene);
     const light = new DirectionalLight();
-    light.position.set(0, 1, 1);
-    light.intensity = 0.5;
+    light.position.set(-10, 10, 0);
+    light.intensity = 2;
+
+    //Set up shadow properties for the light
+    const lightBox = sceneBox.clone();
+    const lightDir = new Vector3(-10, 10, 0).normalize();
+    const N = lightDir.clone();
+    const T = (new Vector3(0, 1, 0)).cross(N).normalize();
+    const B = N.clone().cross(T).normalize();
+    lightBox.min.projectOnPlane(lightDir);
+    lightBox.max.projectOnPlane(lightDir);
+
+    light.shadow.camera.left = T.dot(lightBox.min);
+    light.shadow.camera.bottom = B.dot(lightBox.min);
+    light.shadow.camera.right = T.dot(lightBox.max);
+    light.shadow.camera.top = B.dot(lightBox.max);
+    light.position.copy(N.clone().multiplyScalar(N.dot(new Vector3(sceneBox.min.x, sceneBox.max.y, sceneBox.min.z))));
+
+    light.castShadow = true;
+    light.shadow.mapSize.width = 1024; // default
+    light.shadow.mapSize.height = 1024; // default
+    light.shadow.camera.near = 0; // default
+    light.shadow.camera.far = light.position.length() + N.clone().multiplyScalar(N.dot(new Vector3(sceneBox.max.x, sceneBox.min.y, sceneBox.max.z))).length(); // default
+    light.shadow.camera.updateProjectionMatrix();
+    mainLight = light;
+
+    const helper = new THREE.CameraHelper( light.shadow.camera );
+    scene.add( helper );
+
     const ambient = new AmbientLight(0x666666);
+    ambient.intensity = 200;
     const pointLight = new PointLight();
     pointLight.position.set(-1, 10, 10);
     pointLight.intensity = 2;
     scene.add(light);
     scene.add(ambient);
-    scene.add(pointLight);
-    scene.overrideMaterial = new MeshLambertMaterial({color: 0x555555});
+    //scene.add(pointLight);
+
     renderer = new THREE.WebGLRenderer( { canvas, antialias: false } );
+    renderer.shadowMap.enabled = true;
     document.body.appendChild( renderer.domElement );
+
+
+    floorMesh.receiveShadow = true;
+    bricksGroup.children.forEach(mesh => {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+    })
 
     raycaster = new Raycaster();
 
@@ -124,15 +171,10 @@ function setupPhysicsScene() {
         gravity: new CANNON.Vec3(0, -9.81, 0)
     });
 
-    const bricks = glbScene.getObjectByName('bricks');
-    const floorMesh = glbScene.getObjectByName('floor');
+    const bricks = bricksGroup;
     const floorBoundingBox = floorMesh.geometry.boundingBox;
 
-    const boundingBoxSize = new Vector3(20, 20, 20);
-    boundingBox = new Box3(
-        new Vector3(-boundingBoxSize.x / 2, floorBoundingBox.max.y, -boundingBoxSize.z / 2),
-        new Vector3(boundingBoxSize.x / 2, floorBoundingBox.max.y + boundingBoxSize.y, boundingBoxSize.z / 2)
-    );
+    boundingBox = sceneBox;
     const boundingPlanes = new Array(6).fill(0).map(() => new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: new CANNON.Plane()
@@ -163,8 +205,7 @@ function setupPhysicsScene() {
         mesh.geometry.computeBoundingBox();
         const brickBoundingBox = mesh.geometry.boundingBox;
         const dim = brickBoundingBox.max.sub(brickBoundingBox.min);
-        dim.multiplyScalar(0.5);
-        console.log(dim);
+        dim.multiplyScalar(0.49);
 
         const brickBody = new CANNON.Body({
             mass: 1,
@@ -230,8 +271,6 @@ function setupPhysicsScene() {
         // Cast a ray from where the mouse is pointing and
         // see if we hit something
         const intersection = getIntersection(clientX, clientY, bricksContainer, camera);
-
-        console.log(canvasRect);
 
         // Return if the cube wasn't hit
         if (!intersection) {
