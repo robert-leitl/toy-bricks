@@ -19,6 +19,10 @@ import { PlaneGeometry } from 'three';
 import { Box3 } from 'three';
 import  './modernizr';
 import { Matrix4 } from 'three';
+import brickVert from './shader/brick.vert.glsl';
+import brickFrag from './shader/brick.frag.glsl';
+import { ShaderMaterial } from 'three';
+import { UniformsUtils } from 'three';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -55,6 +59,7 @@ var _isDev,
     bricksContainer,
     brickMeshes,
     boundingBox,
+    brickMaterial,
     movementPlane,
     sceneBox,
     canvasRect;
@@ -93,52 +98,35 @@ function setupScene(canvas) {
     sceneBox.max.y = 10;
 
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
-    camera.position.set(0, 15, 30);
+    camera.position.set(0, 8, 15);
     camera.lookAt(new Vector3());
 
     scene = new THREE.Scene();
     scene.add(glbScene);
     const light = new DirectionalLight();
     light.position.set(-10, 10, 0);
-    light.intensity = 2;
-
-    //Set up shadow properties for the light
-    const lightBox = sceneBox.clone();
-    const lightDir = new Vector3(-10, 10, 0).normalize();
-    const N = lightDir.clone();
-    const T = (new Vector3(0, 1, 0)).cross(N).normalize();
-    const B = N.clone().cross(T).normalize();
-    lightBox.min.projectOnPlane(lightDir);
-    lightBox.max.projectOnPlane(lightDir);
-
-    light.shadow.camera.left = T.dot(lightBox.min);
-    light.shadow.camera.bottom = B.dot(lightBox.min);
-    light.shadow.camera.right = T.dot(lightBox.max);
-    light.shadow.camera.top = B.dot(lightBox.max);
-    light.position.copy(N.clone().multiplyScalar(N.dot(new Vector3(sceneBox.min.x, sceneBox.max.y, sceneBox.min.z))));
-
+    light.intensity = 1;
     light.castShadow = true;
     light.shadow.mapSize.width = 1024; // default
     light.shadow.mapSize.height = 1024; // default
     light.shadow.camera.near = 0; // default
-    light.shadow.camera.far = light.position.length() + N.clone().multiplyScalar(N.dot(new Vector3(sceneBox.max.x, sceneBox.min.y, sceneBox.max.z))).length(); // default
+    light.shadow.type = THREE.PCFShadowMap;
+    light.shadow.blurSamples = 5;
+    light.shadow.radius = 2;
+    light.shadow.normalBias = - 0.15;
+    fitShadowCameraToBox(light, sceneBox);
+
     light.shadow.camera.updateProjectionMatrix();
     mainLight = light;
 
     const helper = new THREE.CameraHelper( light.shadow.camera );
     scene.add( helper );
 
-    const ambient = new AmbientLight(0x666666);
-    ambient.intensity = 200;
-    const pointLight = new PointLight();
-    pointLight.position.set(-1, 10, 10);
-    pointLight.intensity = 2;
     scene.add(light);
-    scene.add(ambient);
-    //scene.add(pointLight);
 
     renderer = new THREE.WebGLRenderer( { canvas, antialias: false } );
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap
     document.body.appendChild( renderer.domElement );
 
 
@@ -154,6 +142,38 @@ function setupScene(canvas) {
     controls.enableDamping = true;
     controls.update();*/
 
+    brickMaterial = new ShaderMaterial({
+        uniforms: UniformsUtils.merge([
+          {},
+          THREE.UniformsLib.lights,
+        ]),
+        vertexShader: brickVert,
+        fragmentShader: brickFrag,
+        glslVersion: THREE.GLSL3,
+        lights: true,
+        dithering: true
+      });
+      brickMaterial.onBeforeCompile = (shader) => {
+        shader.vertexShader = `
+          #include <common>
+          #include <shadowmap_pars_vertex>
+          ${shader.vertexShader}
+        `;
+        shader.fragmentShader = `
+          #include <common>
+          #include <packing>
+          #include <bsdfs>
+          #include <lights_pars_begin>
+          #include <lights_lambert_pars_fragment>
+          #include <shadowmap_pars_fragment>
+          #include <shadowmask_pars_fragment>
+          #include <dithering_pars_fragment>
+          ${shader.fragmentShader}
+        `;
+      };
+    bricksGroup.children.forEach(mesh => mesh.material = brickMaterial)
+
+
     // Movement plane when dragging
     const planeGeometry = new PlaneGeometry(100, 100)
     movementPlane = new Mesh(planeGeometry, new MeshBasicMaterial());
@@ -166,13 +186,34 @@ function setupScene(canvas) {
     _isInitialized = true;
 }
 
+function fitShadowCameraToBox(light, box) {
+    const direction = light.position.clone().normalize();
+    const m = new Matrix4().lookAt(new Vector3(), direction, new Vector3(0, 1, 0));
+    m.invert();
+    const vertices = [];
+    vertices[0] = box.min.clone().applyMatrix4(m);
+    vertices[1] = (new Vector3(box.min.x, box.min.y, box.max.z)).applyMatrix4(m);
+    vertices[2] = (new Vector3(box.min.x, box.max.y, box.min.z)).applyMatrix4(m);
+    vertices[3] = (new Vector3(box.max.x, box.min.y, box.min.z)).applyMatrix4(m);
+    vertices[4] = (new Vector3(box.max.x, box.max.y, box.min.z)).applyMatrix4(m);
+    vertices[5] = box.max.clone().applyMatrix4(m);
+    const camera = light.shadow.camera;
+    camera.left = vertices.reduce((a, v) => v.x < a ? v.x : a, Number.MAX_VALUE); 
+    camera.right = vertices.reduce((a, v) => v.x > a ? v.x : a, Number.MIN_VALUE);
+    camera.bottom = vertices.reduce((a, v) => v.y < a ? v.y : a, Number.MAX_VALUE); 
+    camera.top = vertices.reduce((a, v) => v.y > a ? v.y : a, Number.MIN_VALUE);
+    const minZ = vertices.reduce((a, v) => v.z < a ? v.z : a, Number.MAX_VALUE);
+    camera.near = light.position.length() + minZ; 
+    camera.far = camera.near - minZ + vertices.reduce((a, v) => v.z > a ? v.z : a, Number.MIN_VALUE);
+    console.log(camera);
+}
+
 function setupPhysicsScene() {
     world = new CANNON.World({
         gravity: new CANNON.Vec3(0, -9.81, 0)
     });
 
     const bricks = bricksGroup;
-    const floorBoundingBox = floorMesh.geometry.boundingBox;
 
     boundingBox = sceneBox;
     const boundingPlanes = new Array(6).fill(0).map(() => new CANNON.Body({
@@ -320,6 +361,18 @@ function setupPhysicsScene() {
 
         // Remove the mouse constraint from the world
         removeJointConstraint()
+    });
+    renderer.domElement.addEventListener('pointerout', (e) => {
+        isDragging = false;
+        removeJointConstraint();
+    });
+    renderer.domElement.addEventListener('pointercancel', (e) => {
+        isDragging = false;
+        removeJointConstraint();
+    });
+    renderer.domElement.addEventListener('pointerleave', (e) => {
+        isDragging = false;
+        removeJointConstraint();
     });
 }
 
