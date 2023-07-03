@@ -19,10 +19,13 @@ import { PlaneGeometry } from 'three';
 import { Box3 } from 'three';
 import  './modernizr';
 import { Matrix4 } from 'three';
-import brickVert from './shader/brick.vert.glsl';
-import brickFrag from './shader/brick.frag.glsl';
 import { ShaderMaterial } from 'three';
 import { UniformsUtils } from 'three';
+
+import brickVert from './shader/brick.vert.glsl';
+import brickFrag from './shader/brick.frag.glsl';
+import floorVert from './shader/floor.vert.glsl';
+import floorFrag from './shader/floor.frag.glsl';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -103,14 +106,15 @@ function setupScene(canvas) {
 
     scene = new THREE.Scene();
     scene.add(glbScene);
+    scene.background = 0xffffff;
     const light = new DirectionalLight();
     light.position.set(-10, 10, 0);
-    light.intensity = 1;
+    light.intensity = 2;
     light.castShadow = true;
     light.shadow.mapSize.width = 1024; // default
     light.shadow.mapSize.height = 1024; // default
     light.shadow.camera.near = 0; // default
-    light.shadow.type = THREE.PCFShadowMap;
+    light.shadow.type = THREE.PCFSoftShadowMap;
     light.shadow.blurSamples = 5;
     light.shadow.radius = 2;
     light.shadow.normalBias = - 0.15;
@@ -120,13 +124,13 @@ function setupScene(canvas) {
     mainLight = light;
 
     const helper = new THREE.CameraHelper( light.shadow.camera );
-    scene.add( helper );
+    //scene.add( helper );
 
     scene.add(light);
 
     renderer = new THREE.WebGLRenderer( { canvas, antialias: false } );
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     document.body.appendChild( renderer.domElement );
 
 
@@ -173,6 +177,36 @@ function setupScene(canvas) {
       };
     bricksGroup.children.forEach(mesh => mesh.material = brickMaterial)
 
+    const floorMaterial = new ShaderMaterial({
+        uniforms: UniformsUtils.merge([
+          {},
+          THREE.UniformsLib.lights,
+        ]),
+        vertexShader: floorVert,
+        fragmentShader: floorFrag,
+        glslVersion: THREE.GLSL3,
+        lights: true,
+        dithering: true
+      });
+      floorMaterial.onBeforeCompile = (shader) => {
+        shader.vertexShader = `
+          #include <common>
+          #include <shadowmap_pars_vertex>
+          ${shader.vertexShader}
+        `;
+        shader.fragmentShader = `
+          #include <common>
+          #include <packing>
+          #include <bsdfs>
+          #include <lights_pars_begin>
+          #include <lights_lambert_pars_fragment>
+          #include <shadowmap_pars_fragment>
+          #include <shadowmask_pars_fragment>
+          #include <dithering_pars_fragment>
+          ${shader.fragmentShader}
+        `;
+      };
+    floorMesh.material = floorMaterial;
 
     // Movement plane when dragging
     const planeGeometry = new PlaneGeometry(100, 100)
