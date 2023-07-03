@@ -107,9 +107,17 @@ function setupScene(canvas) {
     sceneBox = floorMesh.geometry.boundingBox.clone();
     sceneBox.max.y = 10;
 
-    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
+    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 6, 26 );
     camera.position.set(0, 8, 15);
     camera.lookAt(new Vector3());
+    console.log(camera.near, camera.far);
+
+    const nearPoint = (new Vector3(0, sceneBox.max.y, sceneBox.max.z)).applyMatrix4(camera.matrixWorldInverse);
+    const farPoint = (new Vector3(0, sceneBox.min.y, sceneBox.min.z)).applyMatrix4(camera.matrixWorldInverse);
+    camera.near = (-nearPoint.z);
+    camera.far = (-farPoint.z);
+    console.log(camera.near, camera.far);
+    
 
     scene = new THREE.Scene();
     scene.add(glbScene);
@@ -136,7 +144,7 @@ function setupScene(canvas) {
 
     scene.add(light);
 
-    renderer = new THREE.WebGLRenderer( { canvas, antialias: false } );
+    renderer = new THREE.WebGLRenderer( { canvas, antialias: true } );
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     document.body.appendChild( renderer.domElement );
@@ -198,6 +206,7 @@ function setupScene(canvas) {
         viewportSize.y,
         2,
         {
+            samples: 2
             //stencilBuffer: true
         }
     );

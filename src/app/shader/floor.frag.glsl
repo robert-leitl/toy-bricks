@@ -5,7 +5,8 @@ out vec4 outColor;
 
 
 void main(void) {
-  vec3 color = vec3(length(vUv * 2. - 1.) * 0.3 + 0.7);
+  float mask = length(vUv * 2. - 1.);
+  vec3 color = vec3(mask * 0.3 + 0.7);
 
   GeometricContext geometry;
   geometry.position = - vViewPosition;
@@ -29,7 +30,7 @@ void main(void) {
   vec3 shadowColor = vec3(0, 0, 0);
   float shadowPower = .4;
   float shadowMask = getShadowMask();
-  color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower);
+  color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower * (1. - mask));
 
   outColor.rgb = color;
   outColor.a = 1.;

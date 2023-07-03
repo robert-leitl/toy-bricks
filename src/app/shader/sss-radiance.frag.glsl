@@ -1,7 +1,13 @@
+uniform mat4 projectionMatrix;
+
 in vec3 vNormal;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outNormal;
+
+float map(float value, float inMin, float inMax, float outMin, float outMax) {
+  return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+}
 
 void main(void) {
   vec3 albedo = vec3(0.15, 0.35, .9);
@@ -37,6 +43,14 @@ void main(void) {
   outColor.a = 1.;
 
   outNormal = vec4(N, 0.0);
+
+  float z_ndc = gl_FragCoord.z * 2.0 - 1.0;
+  float A = projectionMatrix[2][2];
+  float B = projectionMatrix[3][2];
+  float z_eye = B / (A + z_ndc);
+  float near = projectionMatrix[3][2]/(projectionMatrix[2][2]-1.);
+  float far = projectionMatrix[3][2]/(projectionMatrix[2][2]+1.);
+  outNormal.a = map(z_eye, near, far, 0., 1.);
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);
