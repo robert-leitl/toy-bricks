@@ -39,8 +39,6 @@ void main(void) {
   color = color * 0.9 + fresnel * 0.1;
   color += specular * 0.4;
 
-  
-
   outColor.rgb = color;
   outColor.a = 1.;
 

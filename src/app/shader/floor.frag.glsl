@@ -27,7 +27,7 @@ void main(void) {
 
   // apply shadow
   vec3 shadowColor = vec3(0, 0, 0);
-  float shadowPower = .3;
+  float shadowPower = .4;
   float shadowMask = getShadowMask();
   color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower);
 
