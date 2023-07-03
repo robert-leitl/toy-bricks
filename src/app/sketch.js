@@ -22,10 +22,14 @@ import { Matrix4 } from 'three';
 import { ShaderMaterial } from 'three';
 import { UniformsUtils } from 'three';
 
+import sssRadianceFrag from './shader/sss-radiance.frag.glsl';
+import sssRadianceVert from './shader/sss-radiance.vert.glsl';
 import brickVert from './shader/brick.vert.glsl';
 import brickFrag from './shader/brick.frag.glsl';
 import floorVert from './shader/floor.vert.glsl';
 import floorFrag from './shader/floor.frag.glsl';
+import { WebGLRenderTarget } from 'three';
+import { WebGLMultipleRenderTargets } from 'three';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -65,7 +69,10 @@ var _isDev,
     brickMaterial,
     movementPlane,
     sceneBox,
+    viewportSize,
     canvasRect;
+
+var sssRadianceMaterial, sssRadianceTarget;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
@@ -122,6 +129,7 @@ function setupScene(canvas) {
 
     light.shadow.camera.updateProjectionMatrix();
     mainLight = light;
+    mainLight.layers.enable(5);
 
     const helper = new THREE.CameraHelper( light.shadow.camera );
     //scene.add( helper );
@@ -132,6 +140,7 @@ function setupScene(canvas) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     document.body.appendChild( renderer.domElement );
+    viewportSize = new Vector2(renderer.domElement.clientWidth, renderer.domElement.clientHeight);
 
 
     floorMesh.receiveShadow = true;
@@ -146,37 +155,6 @@ function setupScene(canvas) {
     controls.enableDamping = true;
     controls.update();*/
 
-    brickMaterial = new ShaderMaterial({
-        uniforms: UniformsUtils.merge([
-          {},
-          THREE.UniformsLib.lights,
-        ]),
-        vertexShader: brickVert,
-        fragmentShader: brickFrag,
-        glslVersion: THREE.GLSL3,
-        lights: true,
-        dithering: true
-      });
-      brickMaterial.onBeforeCompile = (shader) => {
-        shader.vertexShader = `
-          #include <common>
-          #include <shadowmap_pars_vertex>
-          ${shader.vertexShader}
-        `;
-        shader.fragmentShader = `
-          #include <common>
-          #include <packing>
-          #include <bsdfs>
-          #include <lights_pars_begin>
-          #include <lights_lambert_pars_fragment>
-          #include <shadowmap_pars_fragment>
-          #include <shadowmask_pars_fragment>
-          #include <dithering_pars_fragment>
-          ${shader.fragmentShader}
-        `;
-      };
-    bricksGroup.children.forEach(mesh => mesh.material = brickMaterial)
-
     const floorMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {},
@@ -188,24 +166,24 @@ function setupScene(canvas) {
         lights: true,
         dithering: true
       });
-      floorMaterial.onBeforeCompile = (shader) => {
-        shader.vertexShader = `
-          #include <common>
-          #include <shadowmap_pars_vertex>
-          ${shader.vertexShader}
-        `;
-        shader.fragmentShader = `
-          #include <common>
-          #include <packing>
-          #include <bsdfs>
-          #include <lights_pars_begin>
-          #include <lights_lambert_pars_fragment>
-          #include <shadowmap_pars_fragment>
-          #include <shadowmask_pars_fragment>
-          #include <dithering_pars_fragment>
-          ${shader.fragmentShader}
-        `;
-      };
+    floorMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = `
+        #include <common>
+        #include <shadowmap_pars_vertex>
+        ${shader.vertexShader}
+    `;
+    shader.fragmentShader = `
+        #include <common>
+        #include <packing>
+        #include <bsdfs>
+        #include <lights_pars_begin>
+        #include <lights_lambert_pars_fragment>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
+        #include <dithering_pars_fragment>
+        ${shader.fragmentShader}
+    `;
+    };
     floorMesh.material = floorMaterial;
 
     // Movement plane when dragging
@@ -213,7 +191,91 @@ function setupScene(canvas) {
     movementPlane = new Mesh(planeGeometry, new MeshBasicMaterial());
     movementPlane.rotation.x = -Math.PI / 2;
     movementPlane.visible = false;
-    scene.add(movementPlane)
+    scene.add(movementPlane);
+
+    sssRadianceTarget = new WebGLMultipleRenderTargets(
+        viewportSize.x,
+        viewportSize.y,
+        2,
+        {
+            //stencilBuffer: true
+        }
+    );
+    sssRadianceTarget.texture[0].name = 'diffuse';
+	sssRadianceTarget.texture[1].name = 'normal';
+
+    console.log(sssRadianceTarget);
+
+    brickMaterial = new ShaderMaterial({
+        uniforms: UniformsUtils.merge([
+          {
+            tDiffuse: { value: sssRadianceTarget.texture[ 0 ] },
+            tNormal: { value: sssRadianceTarget.texture[ 1 ] },
+            resolution: { value: new Vector2() }
+          },
+          THREE.UniformsLib.lights,
+        ]),
+        vertexShader: brickVert,
+        fragmentShader: brickFrag,
+        glslVersion: THREE.GLSL3,
+        lights: true,
+        dithering: true
+    });
+    brickMaterial.uniforms.tDiffuse.value = sssRadianceTarget.texture[ 0 ];
+    brickMaterial.uniforms.tNormal.value = sssRadianceTarget.texture[ 1 ];
+    brickMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = `
+        #include <common>
+        #include <shadowmap_pars_vertex>
+        ${shader.vertexShader}
+    `;
+    shader.fragmentShader = `
+        #include <common>
+        #include <packing>
+        #include <bsdfs>
+        #include <lights_pars_begin>
+        #include <lights_lambert_pars_fragment>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
+        #include <dithering_pars_fragment>
+        ${shader.fragmentShader}
+    `;
+    };
+    bricksGroup.children.forEach(mesh => {
+        mesh.material = brickMaterial;
+        mesh.layers.enable(5);
+    });
+    bricksGroup.layers.enable(5);
+
+    sssRadianceMaterial = new ShaderMaterial({
+        uniforms: UniformsUtils.merge([
+          {},
+          THREE.UniformsLib.lights,
+        ]),
+        vertexShader: sssRadianceVert,
+        fragmentShader: sssRadianceFrag,
+        glslVersion: THREE.GLSL3,
+        lights: true,
+        dithering: true
+    });
+    sssRadianceMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = `
+        #include <common>
+        #include <shadowmap_pars_vertex>
+        ${shader.vertexShader}
+    `;
+    shader.fragmentShader = `
+        #include <common>
+        #include <packing>
+        #include <bsdfs>
+        #include <lights_pars_begin>
+        #include <lights_lambert_pars_fragment>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
+        #include <dithering_pars_fragment>
+        ${shader.fragmentShader}
+    `;
+    };
 
     setupPhysicsScene();
 
@@ -424,9 +486,13 @@ function resize() {
     if (!_isInitialized) return;
     
     if (resizeRendererToDisplaySize(renderer)) {
-        const size = new Vector2(renderer.domElement.clientWidth, renderer.domElement.clientHeight);
-        camera.aspect = size.x / size.y;
+        renderer.getSize(viewportSize);
+        camera.aspect = viewportSize.x / viewportSize.y;
         camera.updateProjectionMatrix();
+
+        sssRadianceTarget.setSize(viewportSize.x, viewportSize.y);
+        brickMaterial.uniforms.resolution.value.copy(viewportSize);
+        brickMaterial.uniformsNeedUpate = true;
     }
 }
 
@@ -447,6 +513,18 @@ function animate() {
 }
 
 function render() {
+    camera.layers.set(5);
+    bricksGroup.children.forEach(mesh => {
+        mesh.material = sssRadianceMaterial;
+    });
+    renderer.setRenderTarget(sssRadianceTarget);
+    renderer.render(scene, camera);
+
+    camera.layers.enableAll();
+    bricksGroup.children.forEach(mesh => {
+        mesh.material = brickMaterial;
+    });
+    renderer.setRenderTarget(null);
     renderer.render( scene, camera );
 }
 

@@ -1,13 +1,9 @@
-uniform sampler2D tDiffuse;
-uniform sampler2D tNormal;
-uniform vec2 resolution;
-
 in vec3 vNormal;
 
-out vec4 outColor;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormal;
 
 void main(void) {
-  vec2 st = gl_FragCoord.xy / resolution;
   vec3 albedo = vec3(0.15, 0.35, .9);
   vec3 ambient = vec3(0.1, 0.1, 0.08);
 
@@ -37,20 +33,10 @@ void main(void) {
   RE_Direct_Lambert( directLight, geometry, material, reflectedLight );
   color = reflectedLight.directDiffuse * .8 + 0.4 * albedo;
 
-  // fresnel term
-	float fresnel = 1. - saturate( dot( V, N ) );
-  vec3 specular = BRDF_BlinnPhong(L, V, N, vec3(1.), 6.);
-  color = color * 0.9 + fresnel * 0.1;
-  color += specular * 0.4;
-
-  vec4 diffuse = texture(tDiffuse, st);
-  vec4 normal = texture(tNormal, st);
-  color = normal.rgb;
-
   outColor.rgb = color;
   outColor.a = 1.;
 
-  //outColor.rgb = vec3(st, 0.);
+  outNormal = vec4(N, 0.0);
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);
