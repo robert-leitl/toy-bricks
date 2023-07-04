@@ -20,7 +20,7 @@ void main(void) {
 
   // apply shadow
   vec3 shadowColor = vec3(0, 0, 0);
-  float shadowPower = 1.2;
+  float shadowPower = 1.1;
   float shadowMask = getShadowMask();
   vec3 color = mix(albedo, shadowColor, (1.0 - shadowMask) * shadowPower);
 
@@ -51,6 +51,7 @@ void main(void) {
   float near = projectionMatrix[3][2]/(projectionMatrix[2][2]-1.);
   float far = projectionMatrix[3][2]/(projectionMatrix[2][2]+1.);
   outNormal.a = map(z_eye, near, far, 0., 1.);
+  outColor.a = outNormal.a;
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);

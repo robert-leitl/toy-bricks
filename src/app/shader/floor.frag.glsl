@@ -1,3 +1,6 @@
+uniform sampler2D tNormal;
+uniform vec2 resolution;
+
 in vec3 vNormal;
 in vec2 vUv;
 
@@ -28,11 +31,11 @@ void main(void) {
 
   // apply shadow
   vec3 shadowColor = vec3(0, 0, 0);
-  float shadowPower = .4;
+  float shadowPower = .5;
   float shadowMask = getShadowMask();
-  color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower * (1. - mask));
+  color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower);
 
-  outColor.rgb = color;
+  outColor.rgb = mix(color, vec3(1.), vUv.y);
   outColor.a = 1.;
 
   #ifdef DITHERING
