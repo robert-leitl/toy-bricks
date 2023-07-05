@@ -130,9 +130,9 @@ void main(void) {
   float depth = texture(tDepth, st).r;
   vec4 sss = texture(tSSS, st);
 
-  sss.r = min(1., sss.r * 1.0);
+  sss.r = min(1., sss.r * 1.);
   sss.g = min(1., sss.g * 1.0);
-  sss.b = min(1., sss.b * .8);
+  sss.b = min(1., sss.b * .7);
   
   vec3 color = blendLighten(diffuse.rgb, sss.rgb);
 

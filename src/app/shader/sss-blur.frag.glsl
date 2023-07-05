@@ -22,14 +22,14 @@ void main() {
     vec4 diffuse = texture( tDiffuse, vUv);
     vec3 colorM = diffuse.rgb;
     float depthM = texture( tDepth, vUv).r;
-    float scale = 3.5;
+    float scale = 4.5;
 
     if (depthM >= 0.999) {
         discard;
     }
 
     float depthDeltaFactor = 25.;
-    float lumDeltaFactor = 1.2; 
+    float lumDeltaFactor = 1.25; 
 
     vec3 diffuseSum = diffuse.rgb * weightSum;
     for( int i = 1; i < kernelSize; i ++ ) {
