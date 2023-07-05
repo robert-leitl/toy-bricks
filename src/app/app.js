@@ -1,6 +1,7 @@
 import { debounceTime, fromEvent, take } from 'rxjs';
 import { Pane } from 'tweakpane';
 import sketch from './sketch';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
 
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
@@ -14,6 +15,17 @@ if (isDev) {
 
 if (hasDebugParam || isDev) {
     pane = new Pane({ title: 'Settings', expanded: isDev });
+}
+
+const stats = new Stats();
+if (isDev) {
+  stats.showPanel(0);
+  document.body.appendChild(stats.dom);
+  const updateStats = () => {
+    stats.update();
+    requestAnimationFrame(updateStats);
+  };
+  updateStats();
 }
 
 const resize = () => {

@@ -3,10 +3,24 @@ uniform mat4 projectionMatrix;
 in vec3 vNormal;
 
 layout(location = 0) out vec4 outColor;
-layout(location = 1) out vec4 outNormal;
+layout(location = 1) out vec4 outDepth;
 
 float map(float value, float inMin, float inMax, float outMin, float outMax) {
   return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+}
+
+float getLinearZ(in float depth, in mat4 projectionMatrix) {
+    float z_ndc = depth * 2.0 - 1.0;
+    float A = projectionMatrix[2][2];
+    float B = projectionMatrix[3][2];
+    return B / (A + z_ndc);
+}
+
+float getNormalizedZ(in float depth, in mat4 projectionMatrix) {
+    float linearZ = getLinearZ(depth, projectionMatrix);
+    float near = projectionMatrix[3][2]/(projectionMatrix[2][2] - 1.);
+    float far = projectionMatrix[3][2]/(projectionMatrix[2][2] + 1.);
+    return map(linearZ, near, far, 0., 1.);
 }
 
 void main(void) {
@@ -37,21 +51,13 @@ void main(void) {
   material.diffuseColor = color;
   material.specularStrength = 100.;
   RE_Direct_Lambert( directLight, geometry, material, reflectedLight );
-  color = reflectedLight.directDiffuse * .8 + 0.4 * albedo;
+  color = reflectedLight.directDiffuse;
+  color = color * 0.65 + albedo * 0.35;
 
   outColor.rgb = color;
   outColor.a = 1.;
 
-  outNormal = vec4(N, 0.0);
-
-  float z_ndc = gl_FragCoord.z * 2.0 - 1.0;
-  float A = projectionMatrix[2][2];
-  float B = projectionMatrix[3][2];
-  float z_eye = B / (A + z_ndc);
-  float near = projectionMatrix[3][2]/(projectionMatrix[2][2]-1.);
-  float far = projectionMatrix[3][2]/(projectionMatrix[2][2]+1.);
-  outNormal.a = map(z_eye, near, far, 0., 1.);
-  outColor.a = outNormal.a;
+  outDepth.r = getNormalizedZ(gl_FragCoord.z, projectionMatrix);
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);

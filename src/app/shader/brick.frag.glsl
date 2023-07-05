@@ -1,5 +1,5 @@
 uniform sampler2D tDiffuse;
-uniform sampler2D tNormal;
+uniform sampler2D tDepth;
 uniform sampler2D tSSS;
 uniform vec2 resolution;
 
@@ -33,14 +33,14 @@ void main(void) {
   vec2 st = gl_FragCoord.xy / resolution;
 
   vec4 diffuse = texture(tDiffuse, st);
-  vec4 normal = texture(tNormal, st);
+  float depth = texture(tDepth, st).r;
   vec4 sss = texture(tSSS, st);
 
   sss.r = min(1., sss.r * 1.0);
-  sss.g = min(1., sss.g * 1.3);
-  sss.b = min(1., sss.b * .7);
+  sss.g = min(1., sss.g * 1.0);
+  sss.b = min(1., sss.b * .8);
   
-  vec3 color = blendLighten(diffuse.rgb, sss.rgb * 1.2);
+  vec3 color = blendLighten(diffuse.rgb, sss.rgb);
 
   GeometricContext geometry;
   geometry.position = - vViewPosition;
@@ -59,16 +59,19 @@ void main(void) {
 
   // fresnel term
 	float fresnel = 1. - saturate( dot( V, N ) );
-  fresnel *= shadowMask;
+  //fresnel *= shadowMask;
   color = color * 0.9 + fresnel * 0.1;
 
   // specular
-  vec3 specular = BRDF_BlinnPhong(L, V, N, vec3(1.), 10.);
+  vec3 specular = BRDF_BlinnPhong(L, V, N, vec3(1.), 6.);
   specular *= shadowMask;
-  color += specular * 0.2;
+  color += specular * 0.5;
 
-  outColor.rgb = mix(color, vec3(1.), smoothstep(0.5, 1., normal.a));
+  outColor.rgb = mix(color, vec3(1.), smoothstep(0.5, 1., depth));
   outColor.a = 1.;
+
+  //outColor.rgb = vec3(depth);
+  //outColor.rgb = sss.rgb;
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);

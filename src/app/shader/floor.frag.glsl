@@ -1,4 +1,4 @@
-uniform sampler2D tNormal;
+uniform sampler2D tDepth;
 uniform vec2 resolution;
 
 in vec3 vNormal;
