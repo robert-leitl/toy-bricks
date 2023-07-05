@@ -80,6 +80,13 @@ var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstrai
 
 const blurScale = 0.75;
 
+const albedoColors = [
+    new Vector3(0.1, 0.1, .21),
+    new Vector3(0.21, 0.2, .5),
+    new Vector3(0.5, 0.15, .28),
+    new Vector3(0.15, 0.35, .9),
+]
+
 function init(canvas, onInit = null, isDev = false, pane = null) {
     _isDev = isDev;
     _pane = pane;
@@ -114,12 +121,14 @@ function setupScene(canvas) {
     //sceneBox.max.multiplyScalar(0.7);
 
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 6, 26 );
+    //camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 5, 20);
     camera.position.set(0, 8, 15);
     camera.lookAt(new Vector3());
     const nearPoint = (new Vector3(0, sceneBox.max.y, sceneBox.max.z)).applyMatrix4(camera.matrixWorldInverse);
     const farPoint = (new Vector3(0, sceneBox.min.y, sceneBox.min.z)).applyMatrix4(camera.matrixWorldInverse);
     camera.near = (-nearPoint.z);
     camera.far = (-farPoint.z);
+    console.log(nearPoint, farPoint);
     
 
     scene = new THREE.Scene();
@@ -135,7 +144,7 @@ function setupScene(canvas) {
     light.shadow.type = THREE.PCFShadowMap;
     light.shadow.blurSamples = 3;
     light.shadow.radius = 4;
-    light.shadow.normalBias = - 0.15;
+    light.shadow.normalBias = -0.0;
     fitShadowCameraToBox(light, sceneBox);
 
     light.shadow.camera.updateProjectionMatrix();
@@ -150,6 +159,7 @@ function setupScene(canvas) {
     renderer = new THREE.WebGLRenderer( { canvas, antialias: true } );
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.sortObjects = false;
     renderer.setClearAlpha(1.);
     document.body.appendChild( renderer.domElement );
     viewportSize = new Vector2(renderer.domElement.clientWidth, renderer.domElement.clientHeight);
@@ -283,7 +293,8 @@ function setupScene(canvas) {
         ${shader.fragmentShader}
     `;
     };
-    bricksGroup.children.forEach(mesh => {
+    bricksGroup.children.forEach((mesh, ndx) => {
+        mesh.userData = { ...mesh.userData, ndx }
         mesh.material = brickMaterial;
         mesh.layers.enable(5);
     });
@@ -291,7 +302,9 @@ function setupScene(canvas) {
 
     sssRadianceMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
-          {},
+          {
+            uAlbedo: { value: new Vector3(0.15, 0.35, .9) }
+          },
           THREE.UniformsLib.lights,
         ]),
         vertexShader: sssRadianceVert,
@@ -318,6 +331,11 @@ function setupScene(canvas) {
         ${shader.fragmentShader}
     `;
     };
+    sssRadianceMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
+        renderer.setRenderTarget(sssRadianceTarget);
+        sssRadianceMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
+        sssRadianceMaterial.uniformsNeedUpate = true;
+    }
 
     setupPhysicsScene();
 
@@ -383,7 +401,7 @@ function setupPhysicsScene() {
         mesh.geometry.computeBoundingBox();
         const brickBoundingBox = mesh.geometry.boundingBox;
         const dim = brickBoundingBox.max.sub(brickBoundingBox.min);
-        dim.multiplyScalar(0.49);
+        dim.multiplyScalar(0.48);
 
         const brickBody = new CANNON.Body({
             mass: 1,
@@ -396,7 +414,7 @@ function setupPhysicsScene() {
         world.addBody(brickBody);
 
         brickBodies.push(brickBody);
-        mesh.userData = { body: brickBody };
+        mesh.userData = { ...mesh.userData, body: brickBody };
     });
 
     // Max solver iterations: Use more for better force propagation, but keep in mind that it's not very computationally cheap!
@@ -561,7 +579,7 @@ function animate() {
 
 function render() {
     camera.layers.set(5);
-    bricksGroup.children.forEach(mesh => {
+    bricksGroup.children.forEach((mesh, ndx) => {
         mesh.material = sssRadianceMaterial;
         mesh.scale.set(1.003, 1.003, 1.003);
     });
@@ -572,7 +590,7 @@ function render() {
 
     quadMesh.material.uniforms.tDiffuse.value = sssRadianceTarget.texture[0];
     quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
-    quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
+    quadMesh.material.uniforms.uDirection.value = new Vector2(2, 0);
     quadMesh.material.uniforms.resolution.value = blurSize;
     renderer.setRenderTarget( sssBlurRTHorizonal );
     renderer.clear(true, true);
@@ -580,7 +598,7 @@ function render() {
 
     quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
     quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
-    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
+    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 2);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );

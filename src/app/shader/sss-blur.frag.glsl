@@ -29,7 +29,7 @@ void main() {
     }
 
     float depthDeltaFactor = 25.;
-    float lumDeltaFactor = 1.25; 
+    float lumDeltaFactor = 1.2; 
 
     vec3 diffuseSum = diffuse.rgb * weightSum;
     for( int i = 1; i < kernelSize; i ++ ) {
