@@ -84,7 +84,7 @@ const albedoColors = [
     new Vector3(0.1, 0.1, .21),
     new Vector3(0.21, 0.2, .5),
     new Vector3(0.5, 0.15, .28),
-    new Vector3(0.15, 0.35, .9),
+    new Vector3(0.1, 0.3, .85),
 ]
 
 function init(canvas, onInit = null, isDev = false, pane = null) {
@@ -120,15 +120,15 @@ function setupScene(canvas) {
     //sceneBox.min.z *= 0.3;
     //sceneBox.max.multiplyScalar(0.7);
 
-    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 6, 26 );
+    camera = new THREE.PerspectiveCamera( 20, window.innerWidth / window.innerHeight, 6, 96 );
     //camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 5, 20);
-    camera.position.set(0, 8, 15);
+    camera.position.set(0, 18, 25);
     camera.lookAt(new Vector3());
     const nearPoint = (new Vector3(0, sceneBox.max.y, sceneBox.max.z)).applyMatrix4(camera.matrixWorldInverse);
     const farPoint = (new Vector3(0, sceneBox.min.y, sceneBox.min.z)).applyMatrix4(camera.matrixWorldInverse);
-    camera.near = (-nearPoint.z);
-    camera.far = (-farPoint.z);
-    console.log(nearPoint, farPoint);
+    camera.near = nearPoint.length();
+    camera.far = farPoint.length();
+    console.log(nearPoint.length(), farPoint.length());
     
 
     scene = new THREE.Scene();
@@ -371,6 +371,8 @@ function setupPhysicsScene() {
     const bricks = bricksGroup;
 
     boundingBox = sceneBox.clone();
+    boundingBox.min.multiplyScalar(0.7);
+    boundingBox.max.multiplyScalar(0.7);
     const boundingPlanes = new Array(6).fill(0).map(() => new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: new CANNON.Plane()
@@ -403,9 +405,17 @@ function setupPhysicsScene() {
         const dim = brickBoundingBox.max.sub(brickBoundingBox.min);
         dim.multiplyScalar(0.48);
 
+        let shape;
+        if (mesh.name.indexOf('cylinder') !== -1) {
+            console.log(dim);
+            shape = new CANNON.Cylinder(dim.x, dim.z, dim.y * 2, 20);
+        } else {
+            shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z))
+        }
+
         const brickBody = new CANNON.Body({
             mass: 1,
-            shape: new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z)),
+            shape,
             angularDamping: .94,
             linearDamping: 0.1
         });

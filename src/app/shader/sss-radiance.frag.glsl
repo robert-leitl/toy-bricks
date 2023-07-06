@@ -2,9 +2,11 @@ uniform mat4 projectionMatrix;
 uniform vec3 uAlbedo;
 
 in vec3 vNormal;
+in vec2 vUv;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outDepth;
+
 
 float map(float value, float inMin, float inMax, float outMin, float outMax) {
   return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
@@ -52,7 +54,7 @@ void main(void) {
   DirectionalLight directionalLight = directionalLights[ 0 ];
 	DirectionalLightShadow directionalLightShadow = directionalLightShadows[ 0 ];
 	getDirectionalLightInfo( directionalLight, geometry, directLight );
-  vec3 N = normalize(vNormal);
+  vec3 N = geometry.normal;
   vec3 L = directLight.direction;
   vec3 V = geometry.viewDir;
 

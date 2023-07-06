@@ -124,7 +124,7 @@ vec4 brightnessContrast( vec4 color, float brightness, float contrast ) {
 void main(void) {
   vec2 st = gl_FragCoord.xy / resolution;
 
-  vec3 nn = normalNoise(vUv * 400., .1, 100.);
+  vec3 nn = normalNoise(vUv * 300., .1, 100.);
 
   vec4 diffuse = texture(tDiffuse, st);
   float depth = texture(tDepth, st).r;
@@ -138,7 +138,7 @@ void main(void) {
 
   GeometricContext geometry;
   geometry.position = - vViewPosition;
-  geometry.normal = normalize(vNormal + nn * .3);
+  geometry.normal = normalize(vNormal + nn * .4);
   geometry.viewDir = ( isOrthographic ) ? vec3( 0, 0, 1 ) : normalize( vViewPosition );
 
   IncidentLight directLight; 

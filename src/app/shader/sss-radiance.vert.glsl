@@ -1,4 +1,5 @@
 out vec3 vNormal;
+out vec2 vUv;
 out vec3 vViewPosition;
 
 void main() {
