@@ -186,17 +186,18 @@ function setupScene(canvas) {
     sssRadianceTarget = new WebGLMultipleRenderTargets(
         viewportSize.x,
         viewportSize.y,
-        2,
+        3,
         {
             samples: 2
         }
     );
     sssRadianceTarget.texture[0].name = 'diffuse';
 	sssRadianceTarget.texture[1].name = 'depth';
+	sssRadianceTarget.texture[2].name = 'normal';
     sssRadianceTarget.texture[1].type = THREE.FloatType;
     sssRadianceTarget.texture[1].format = THREE.RedFormat;
     sssRadianceTarget.texture[1].internalFormat = 'R32F';
-    sssRadianceTarget.texture[1].needsUpdate = true;
+    sssRadianceTarget.texture[2].type = THREE.HalfFloatType;
 
     blurSize = viewportSize.clone().multiplyScalar(blurScale);
     sssBlurRTHorizonal = new THREE.WebGLRenderTarget( blurSize.x, blurSize.y, { });
@@ -209,6 +210,7 @@ function setupScene(canvas) {
         {
             tDiffuse: { value: sssRadianceTarget.texture[ 0 ] },
             tDepth: { value: sssRadianceTarget.texture[ 1 ] },
+            tNormal: { value: sssRadianceTarget.texture[ 2 ] },
             resolution: { value: new Vector2() },
             uDirection: { value: 0 }
         },
@@ -437,9 +439,9 @@ function setupPhysicsScene() {
     // Stabilization time in number of timesteps
     world.defaultContactMaterial.contactEquationRelaxation = 3;
 
-    world.defaultContactMaterial.restitution = 0.1;
-    world.defaultContactMaterial.friction = 1;
-    world.defaultContactMaterial.frictionEquationStiffness = 1e10;
+    world.defaultContactMaterial.restitution = .3;
+    world.defaultContactMaterial.friction = .5;
+    world.defaultContactMaterial.frictionEquationStiffness = 1e6;
 
     // Joint body, to later constraint the cube
     const jointShape = new CANNON.Particle(0.1)
@@ -600,6 +602,7 @@ function render() {
 
     quadMesh.material.uniforms.tDiffuse.value = sssRadianceTarget.texture[0];
     quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
+    quadMesh.material.uniforms.tNormal.value = sssRadianceTarget.texture[2];
     quadMesh.material.uniforms.uDirection.value = new Vector2(2, 0);
     quadMesh.material.uniforms.resolution.value = blurSize;
     renderer.setRenderTarget( sssBlurRTHorizonal );
@@ -607,21 +610,18 @@ function render() {
     renderer.render( quadMesh, camera );
 
     quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
-    quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
     quadMesh.material.uniforms.uDirection.value = new Vector2(0., 2);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
     quadMesh.material.uniforms.tDiffuse.value = sssBlurRTVertical.texture;
-    quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
     quadMesh.material.uniforms.uDirection.value = new Vector2(1, 0);
     renderer.setRenderTarget( sssBlurRTHorizonal );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
     quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
-    quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
     quadMesh.material.uniforms.uDirection.value = new Vector2(0., 1);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);

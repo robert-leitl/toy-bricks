@@ -1,5 +1,6 @@
 uniform sampler2D tDiffuse;
 uniform sampler2D tDepth;
+uniform sampler2D tNormal;
 uniform vec2 uDirection;
 uniform vec2 resolution;
 
@@ -13,43 +14,70 @@ float gaussianPdf(in float x, in float sigma) {
     return pow(pdf, 1.);
 }
 
+vec4 getKernelSample(
+    in vec4 cDiffuse, 
+    in float cDepth, 
+    in vec3 cNormal, 
+    in float weight,
+    in vec2 uv,
+    in float depthDeltaFactor,
+    in float lumDeltaFactor
+) {
+    vec4 result = texture(tDiffuse, uv);
+    float depth = texture(tDepth, uv).r;
+    vec3 normal = texture(tNormal, uv).xyz;
+
+    float n = (1. + distance(cNormal, normal)); 
+    float s = min(depthDeltaFactor * abs(cDepth - depth) * n, 1.0);
+    float t = distance(result, cDiffuse) * weight;
+    result *= (lumDeltaFactor + t);
+    result = mix(result, cDiffuse, s);
+
+    return result;
+}
+
 void main() {
     int kernelSize = 6;
     vec2 texelSize = 1. / resolution;
     float fSigma = float(kernelSize);
     float weightSum = gaussianPdf(0.0, fSigma);
 
-    vec4 diffuse = texture( tDiffuse, vUv);
-    vec3 colorM = diffuse.rgb;
-    float depthM = texture( tDepth, vUv).r;
+    vec4 cDiffuse = texture( tDiffuse, vUv);
+    float cDepth = texture( tDepth, vUv).r;
+    vec3 cNormal = texture(tNormal, vUv).xyz;
     float scale = 4.5;
 
-    if (depthM >= 0.999) {
+    if (cDepth >= 0.999) {
         discard;
     }
 
     float depthDeltaFactor = 25.;
     float lumDeltaFactor = 1.25; 
 
-    vec3 diffuseSum = diffuse.rgb * weightSum;
+    vec3 diffuseSum = cDiffuse.rgb * weightSum;
     for( int i = 1; i < kernelSize; i ++ ) {
         float x = float(i);
         float w = gaussianPdf(x, fSigma);
         vec2 uvOffset = uDirection * texelSize * x * scale;
 
-        vec4 sample1 = texture( tDiffuse, vUv + uvOffset);
-        float depth1 = texture( tDepth, vUv + uvOffset).r;
-        float s1 = min(depthDeltaFactor * abs(depthM - depth1), 1.0);
-        float t1 = distance(sample1, diffuse) * w;
-        sample1 *= (lumDeltaFactor + t1);
-        sample1 = mix(sample1, diffuse, s1);
-
-        vec4 sample2 = texture( tDiffuse, vUv - uvOffset);
-        float depth2 = texture( tDepth, vUv - uvOffset).r;
-        float s2 = min(depthDeltaFactor * abs(depthM - depth2), 1.0);
-        float t2 = distance(sample1, diffuse) * w;
-        sample2 *= (lumDeltaFactor + t2);
-        sample2 = mix(sample2, diffuse, s2);
+        vec4 sample1 = getKernelSample(
+            cDiffuse, 
+            cDepth, 
+            cNormal, 
+            w,
+            vUv + uvOffset,
+            depthDeltaFactor,
+            lumDeltaFactor
+        );
+        vec4 sample2 = getKernelSample(
+            cDiffuse, 
+            cDepth, 
+            cNormal, 
+            w,
+            vUv - uvOffset,
+            depthDeltaFactor,
+            lumDeltaFactor
+        );
 
         diffuseSum += (sample1.rgb + sample2.rgb) * w;
         weightSum += 2. * w;

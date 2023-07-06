@@ -6,6 +6,7 @@ in vec2 vUv;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outDepth;
+layout(location = 2) out vec4 outNormal;
 
 
 float map(float value, float inMin, float inMax, float outMin, float outMax) {
@@ -71,6 +72,8 @@ void main(void) {
 
   outDepth.r = getNormalizedZPerspective(gl_FragCoord.z, projectionMatrix);
   //outDepth.r = getNormalizedZOrtho(gl_FragCoord.z);
+
+  outNormal = vec4(N, 0.);
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);
