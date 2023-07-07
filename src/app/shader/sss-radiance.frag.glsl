@@ -65,7 +65,7 @@ void main(void) {
   material.specularStrength = 100.;
   RE_Direct_Lambert( directLight, geometry, material, reflectedLight );
   color = reflectedLight.directDiffuse;
-  color = color * 0.65 + albedo * 0.35;
+  color = color * 0.55 + albedo * 0.4;
 
   outColor.rgb = color;
   outColor.a = 1.;

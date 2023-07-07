@@ -81,10 +81,10 @@ var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstrai
 const blurScale = 0.75;
 
 const albedoColors = [
-    new Vector3(0.1, 0.1, .21),
-    new Vector3(0.21, 0.2, .5),
-    new Vector3(0.5, 0.15, .28),
-    new Vector3(0.1, 0.3, .85),
+    new Vector3(0.17, 0.12, .17),
+    new Vector3(0.4, 0.3, .8),
+    new Vector3(0.8, 0.18, .18),
+    new Vector3(0.15, 0.38, .98),
 ]
 
 function init(canvas, onInit = null, isDev = false, pane = null) {
@@ -265,7 +265,8 @@ function setupScene(canvas) {
             tDiffuse: { value: sssRadianceTarget.texture[ 0 ] },
             tSSS: { value: sssBlurRTVertical.texture },
             tDepth: { value: sssRadianceTarget.texture[ 1 ] },
-            resolution: { value: new Vector2() }
+            resolution: { value: new Vector2() },
+            uAlbedo: { value: new Vector3() }
           },
           THREE.UniformsLib.lights,
         ]),
@@ -295,6 +296,11 @@ function setupScene(canvas) {
         ${shader.fragmentShader}
     `;
     };
+    brickMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
+        renderer.setRenderTarget(null);
+        brickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
+        brickMaterial.uniformsNeedUpate = true;
+    }
     bricksGroup.children.forEach((mesh, ndx) => {
         mesh.userData = { ...mesh.userData, ndx }
         mesh.material = brickMaterial;
@@ -375,6 +381,8 @@ function setupPhysicsScene() {
     boundingBox = sceneBox.clone();
     boundingBox.min.multiplyScalar(0.7);
     boundingBox.max.multiplyScalar(0.7);
+    boundingBox.min.x *= 0.6;
+    boundingBox.max.x *= 0.6;
     const boundingPlanes = new Array(6).fill(0).map(() => new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: new CANNON.Plane()
@@ -603,14 +611,14 @@ function render() {
     quadMesh.material.uniforms.tDiffuse.value = sssRadianceTarget.texture[0];
     quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
     quadMesh.material.uniforms.tNormal.value = sssRadianceTarget.texture[2];
-    quadMesh.material.uniforms.uDirection.value = new Vector2(2, 0);
+    quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
     quadMesh.material.uniforms.resolution.value = blurSize;
     renderer.setRenderTarget( sssBlurRTHorizonal );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
     quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
-    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 2);
+    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );

@@ -1,6 +1,6 @@
 export function resizeRendererToDisplaySize(renderer) {
     const canvas = renderer.domElement;
-    const pixelRatio = window.devicePixelRatio;
+    const pixelRatio = Math.min(2, window.devicePixelRatio);
     const width  = canvas.clientWidth  * pixelRatio | 0;
     const height = canvas.clientHeight * pixelRatio | 0;
     const needResize = canvas.width !== width || canvas.height !== height;

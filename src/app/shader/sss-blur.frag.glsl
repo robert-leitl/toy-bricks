@@ -27,9 +27,9 @@ vec4 getKernelSample(
     float depth = texture(tDepth, uv).r;
     vec3 normal = texture(tNormal, uv).xyz;
 
-    float n = (1. + distance(cNormal, normal)); 
-    float s = min(depthDeltaFactor * abs(cDepth - depth) * n, 1.0);
-    float t = distance(result, cDiffuse) * weight;
+    float n = distance(cNormal, normal); 
+    float s = min(depthDeltaFactor * abs(cDepth - depth) * (1. + n), 1.0);
+    float t = distance(result, cDiffuse) * weight * .7;
     result *= (lumDeltaFactor + t);
     result = mix(result, cDiffuse, s);
 
@@ -37,7 +37,7 @@ vec4 getKernelSample(
 }
 
 void main() {
-    int kernelSize = 6;
+    int kernelSize = 3;
     vec2 texelSize = 1. / resolution;
     float fSigma = float(kernelSize);
     float weightSum = gaussianPdf(0.0, fSigma);
@@ -45,7 +45,7 @@ void main() {
     vec4 cDiffuse = texture( tDiffuse, vUv);
     float cDepth = texture( tDepth, vUv).r;
     vec3 cNormal = texture(tNormal, vUv).xyz;
-    float scale = 4.5;
+    float scale = 8.5;
 
     if (cDepth >= 0.999) {
         discard;

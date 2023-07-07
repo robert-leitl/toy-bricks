@@ -2,6 +2,7 @@ uniform sampler2D tDiffuse;
 uniform sampler2D tDepth;
 uniform sampler2D tSSS;
 uniform vec2 resolution;
+uniform vec3 uAlbedo;
 
 in vec3 vNormal;
 in vec2 vUv;
@@ -121,6 +122,25 @@ vec4 brightnessContrast( vec4 color, float brightness, float contrast ) {
     return vec4(brightnessContrast(color.rgb, brightness, contrast), color.a);
 }
 
+vec3 rgb2hsv(in vec3 rgb)
+{
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(rgb.bg, K.wz), vec4(rgb.gb, K.xy), step(rgb.b, rgb.g));
+    vec4 q = mix(vec4(p.xyw, rgb.r), vec4(rgb.r, p.yzx), step(p.x, rgb.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb( in vec3 hsv )
+{
+    vec3 rgb = clamp( abs(mod(hsv.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0 );
+
+	return hsv.z * mix( vec3(1.0), rgb, hsv.y);
+}
+
 void main(void) {
   vec2 st = gl_FragCoord.xy / resolution;
 
@@ -130,9 +150,13 @@ void main(void) {
   float depth = texture(tDepth, st).r;
   vec4 sss = texture(tSSS, st);
 
-  sss.r = min(1., sss.r * 1.);
-  sss.g = min(1., sss.g * 1.0);
-  sss.b = min(1., sss.b * .7);
+  vec3 albedo = rgb2hsv(uAlbedo);
+  albedo.r -= .14;
+  albedo.b = max(.8, albedo.b);
+  albedo = hsv2rgb(albedo);
+  sss.r = min(1., sss.r * albedo.r);
+  sss.g = min(1., sss.g * albedo.g);
+  sss.b = min(1., sss.b * albedo.b);
   
   vec3 color = blendLighten(diffuse.rgb, sss.rgb);
 
@@ -157,16 +181,18 @@ void main(void) {
   color = color * 0.9 + fresnel * 0.1;
 
   // specular
-  vec3 specular = BRDF_BlinnPhong(L, V, N, vec3(1.), 4.);
+  vec3 specular = BRDF_BlinnPhong(L, V, N, vec3(1.), 5.);
   specular *= shadowMask;
   color += specular * 0.7;
 
-  outColor.rgb = color;
+  color = color * pow(2., .25);
+  outColor.rgb = mix(color, vec3(dot(vec3(.3, .59, .11), color)), .3);
   outColor.a = 1.;
 
   //outColor.rgb = vec3(depth);
   //outColor.rgb = sss.rgb;
   //outColor.rgb = nn;
+  //outColor.rgb = albedo;
 
   #ifdef DITHERING
   outColor.rgb = dithering(outColor.rgb);
