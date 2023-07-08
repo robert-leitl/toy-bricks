@@ -23,14 +23,13 @@ import { ShaderMaterial } from 'three';
 import { UniformsUtils } from 'three';
 import { WebGLMultipleRenderTargets } from 'three';
 
-import sssRadianceFrag from './shader/sss-radiance.frag.glsl';
-import sssRadianceVert from './shader/sss-radiance.vert.glsl';
-import brickVert from './shader/brick.vert.glsl';
-import brickFrag from './shader/brick.frag.glsl';
-import floorVert from './shader/floor.vert.glsl';
-import floorFrag from './shader/floor.frag.glsl';
+import mrtBrickFrag from './shader/mrt-brick.frag.glsl';
+import mrtBrickVert from './shader/mrt-brick.vert.glsl';
+import mrtFloorVert from './shader/mrt-floor.vert.glsl';
+import mrtFloorFrag from './shader/mrt-floor.frag.glsl';
 import quadVert from './shader/quad.vert.glsl';
 import sssBlurFrag from './shader/sss-blur.frag.glsl';
+import compositeFrag from './shader/composite.frag.glsl';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -68,17 +67,17 @@ var _isDev,
     brickMeshes,
     boundingBox,
     brickMaterial,
-    floorMaterial,
+    mrtFloorMaterial,
     movementPlane,
     sceneBox,
     viewportSize,
     canvasRect;
 
-var sssRadianceMaterial, sssRadianceTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical, blurSize;
+var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
-const blurScale = 0.75;
+const blurScale = 1.;
 
 const albedoColors = [
     new Vector3(0.17, 0.12, .17),
@@ -144,7 +143,7 @@ function setupScene(canvas) {
     light.shadow.type = THREE.PCFShadowMap;
     light.shadow.blurSamples = 3;
     light.shadow.radius = 4;
-    light.shadow.normalBias = -0.0;
+    light.shadow.normalBias = -0.05;
     fitShadowCameraToBox(light, sceneBox);
 
     light.shadow.camera.updateProjectionMatrix();
@@ -183,21 +182,22 @@ function setupScene(canvas) {
 
     ////////// 
 
-    sssRadianceTarget = new WebGLMultipleRenderTargets(
+    mrtTarget = new WebGLMultipleRenderTargets(
         viewportSize.x,
         viewportSize.y,
-        3,
+        4,
         {
-            samples: 2
+            samples: 4
         }
     );
-    sssRadianceTarget.texture[0].name = 'diffuse';
-	sssRadianceTarget.texture[1].name = 'depth';
-	sssRadianceTarget.texture[2].name = 'normal';
-    sssRadianceTarget.texture[1].type = THREE.FloatType;
-    sssRadianceTarget.texture[1].format = THREE.RedFormat;
-    sssRadianceTarget.texture[1].internalFormat = 'R32F';
-    sssRadianceTarget.texture[2].type = THREE.HalfFloatType;
+    mrtTarget.texture[0].name = 'RGB_diffuse_A_id';
+	mrtTarget.texture[1].name = 'normalized_linear_depth';
+    mrtTarget.texture[1].type = THREE.FloatType;
+    mrtTarget.texture[1].format = THREE.RedFormat;
+    mrtTarget.texture[1].internalFormat = 'R32F';
+	mrtTarget.texture[2].name = 'XYZ_normal_W_specular';
+    mrtTarget.texture[2].type = THREE.FloatType;
+    mrtTarget.texture[3].name = 'albedo';
 
     blurSize = viewportSize.clone().multiplyScalar(blurScale);
     sssBlurRTHorizonal = new THREE.WebGLRenderTarget( blurSize.x, blurSize.y, { });
@@ -205,12 +205,12 @@ function setupScene(canvas) {
 
     //////////
 
-    const sssBlurMaterial = new ShaderMaterial({
+    sssBlurMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
         {
-            tDiffuse: { value: sssRadianceTarget.texture[ 0 ] },
-            tDepth: { value: sssRadianceTarget.texture[ 1 ] },
-            tNormal: { value: sssRadianceTarget.texture[ 2 ] },
+            tDiffuse_Id: { value: mrtTarget.texture[ 0 ] },
+            tDepth: { value: mrtTarget.texture[ 1 ] },
+            tNormal_Specular: { value: mrtTarget.texture[ 2 ] },
             resolution: { value: new Vector2() },
             uDirection: { value: 0 }
         },
@@ -220,26 +220,20 @@ function setupScene(canvas) {
         fragmentShader: sssBlurFrag,
         glslVersion: THREE.GLSL3,
     });
-    const quadGeo = new THREE.BufferGeometry();
-    quadGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( [ - 1, 3, 0, - 1, - 1, 0, 3, - 1, 0 ], 3 ) );
-    quadGeo.setAttribute( 'uv', new THREE.Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
-    quadMesh = new Mesh(quadGeo, sssBlurMaterial);
 
-    floorMaterial = new ShaderMaterial({
+    mrtFloorMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {
-            tDepth: { value: sssRadianceTarget.texture[1] },
-            resolution: { value: new Vector2() }
           },
           THREE.UniformsLib.lights,
         ]),
-        vertexShader: floorVert,
-        fragmentShader: floorFrag,
+        vertexShader: mrtFloorVert,
+        fragmentShader: mrtFloorFrag,
         glslVersion: THREE.GLSL3,
         lights: true,
         dithering: true
       });
-    floorMaterial.onBeforeCompile = (shader) => {
+    mrtFloorMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = `
         #include <common>
         #include <shadowmap_pars_vertex>
@@ -257,14 +251,14 @@ function setupScene(canvas) {
         ${shader.fragmentShader}
     `;
     };
-    floorMesh.material = floorMaterial;
 
+    /*
     brickMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {
-            tDiffuse: { value: sssRadianceTarget.texture[ 0 ] },
+            tDiffuse: { value: mrtTarget.texture[ 0 ] },
             tSSS: { value: sssBlurRTVertical.texture },
-            tDepth: { value: sssRadianceTarget.texture[ 1 ] },
+            tDepth: { value: mrtTarget.texture[ 1 ] },
             resolution: { value: new Vector2() },
             uAlbedo: { value: new Vector3() }
           },
@@ -276,8 +270,8 @@ function setupScene(canvas) {
         lights: true,
         dithering: true
     });
-    brickMaterial.uniforms.tDiffuse.value = sssRadianceTarget.texture[ 0 ];
-    brickMaterial.uniforms.tSSS.value = sssRadianceTarget.texture[ 1 ];
+    brickMaterial.uniforms.tDiffuse.value = mrtTarget.texture[ 0 ];
+    brickMaterial.uniforms.tSSS.value = mrtTarget.texture[ 1 ];
     brickMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = `
         #include <common>
@@ -301,27 +295,23 @@ function setupScene(canvas) {
         brickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
         brickMaterial.uniformsNeedUpate = true;
     }
-    bricksGroup.children.forEach((mesh, ndx) => {
-        mesh.userData = { ...mesh.userData, ndx }
-        mesh.material = brickMaterial;
-        mesh.layers.enable(5);
-    });
-    bricksGroup.layers.enable(5);
+    */
 
-    sssRadianceMaterial = new ShaderMaterial({
+    mrtBrickMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {
-            uAlbedo: { value: new Vector3(0.15, 0.35, .9) }
+            uAlbedo: { value: new Vector3(0.15, 0.35, .9) },
+            uId: { value: 1 }
           },
           THREE.UniformsLib.lights,
         ]),
-        vertexShader: sssRadianceVert,
-        fragmentShader: sssRadianceFrag,
+        vertexShader: mrtBrickVert,
+        fragmentShader: mrtBrickFrag,
         glslVersion: THREE.GLSL3,
         lights: true,
         dithering: true,
     });
-    sssRadianceMaterial.onBeforeCompile = (shader) => {
+    mrtBrickMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = `
         #include <common>
         #include <shadowmap_pars_vertex>
@@ -339,11 +329,55 @@ function setupScene(canvas) {
         ${shader.fragmentShader}
     `;
     };
-    sssRadianceMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
-        renderer.setRenderTarget(sssRadianceTarget);
-        sssRadianceMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
-        sssRadianceMaterial.uniformsNeedUpate = true;
+    mrtBrickMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
+        renderer.setRenderTarget(mrtTarget);
+        mrtBrickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
+        mrtBrickMaterial.uniforms.uId.value = object.userData.ndx + 1;
+        mrtBrickMaterial.uniformsNeedUpate = true;
     }
+
+    compositeMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            tDiffuse_Id: { value: null },
+            tAlbedo: { value: null },
+            tNormal_Specular: { value: null },
+            tSSS: { value: null }
+        },
+        vertexShader: quadVert,
+        fragmentShader: compositeFrag,
+        glslVersion: THREE.GLSL3,
+        dithering: true
+    });
+    compositeMaterial.onBeforeCompile = (shader) => {
+        shader.vertexShader = `
+            #include <common>
+            ${shader.vertexShader}
+        `;
+        shader.fragmentShader = `
+            #include <common>
+            #include <dithering_pars_fragment>
+            ${shader.fragmentShader}
+        `;
+        };
+
+
+
+
+
+
+    const quadGeo = new THREE.BufferGeometry();
+    quadGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( [ - 1, 3, 0, - 1, - 1, 0, 3, - 1, 0 ], 3 ) );
+    quadGeo.setAttribute( 'uv', new THREE.Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
+    quadMesh = new Mesh(quadGeo, sssBlurMaterial);
+    
+    floorMesh.material = mrtFloorMaterial;
+
+    bricksGroup.children.forEach((mesh, ndx) => {
+        mesh.userData = { ...mesh.userData, ndx }
+        mesh.material = mrtBrickMaterial;
+        mesh.layers.enable(5);
+    });
+    bricksGroup.layers.enable(5);
 
     setupPhysicsScene();
 
@@ -417,7 +451,6 @@ function setupPhysicsScene() {
 
         let shape;
         if (mesh.name.indexOf('cylinder') !== -1) {
-            console.log(dim);
             shape = new CANNON.Cylinder(dim.x, dim.z, dim.y * 2, 20);
         } else {
             shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z))
@@ -569,11 +602,7 @@ function resize() {
         camera.aspect = viewportSize.x / viewportSize.y;
         camera.updateProjectionMatrix();
 
-        sssRadianceTarget.setSize(viewportSize.x, viewportSize.y);
-        brickMaterial.uniforms.resolution.value.copy(viewportSize);
-        brickMaterial.uniformsNeedUpate = true;
-        floorMaterial.uniforms.resolution.value.copy(viewportSize);
-        floorMaterial.uniformsNeedUpate = true;
+        mrtTarget.setSize(viewportSize.x, viewportSize.y);
 
         blurSize = viewportSize.clone().multiplyScalar(blurScale);
         sssBlurRTHorizonal.setSize(blurSize.x, blurSize.y);
@@ -598,52 +627,52 @@ function animate() {
 }
 
 function render() {
-    camera.layers.set(5);
-    bricksGroup.children.forEach((mesh, ndx) => {
-        mesh.material = sssRadianceMaterial;
-        mesh.scale.set(1.003, 1.003, 1.003);
-    });
-    renderer.setRenderTarget(sssRadianceTarget);
+
+    ///// MRT pass
+
+    renderer.setRenderTarget(mrtTarget);
     renderer.clear();
     renderer.render(scene, camera);
-    camera.layers.enableAll();
 
-    quadMesh.material.uniforms.tDiffuse.value = sssRadianceTarget.texture[0];
-    quadMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
-    quadMesh.material.uniforms.tNormal.value = sssRadianceTarget.texture[2];
+    ///// SSS blur passes
+
+    quadMesh.material = sssBlurMaterial;
+    quadMesh.material.uniforms.tDiffuse_Id.value = mrtTarget.texture[0];
+    quadMesh.material.uniforms.tDepth.value = mrtTarget.texture[1];
+    quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
     quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
     quadMesh.material.uniforms.resolution.value = blurSize;
     renderer.setRenderTarget( sssBlurRTHorizonal );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
-    quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
+    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
     quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
-    quadMesh.material.uniforms.tDiffuse.value = sssBlurRTVertical.texture;
+    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTVertical.texture;
     quadMesh.material.uniforms.uDirection.value = new Vector2(1, 0);
     renderer.setRenderTarget( sssBlurRTHorizonal );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
-    quadMesh.material.uniforms.tDiffuse.value = sssBlurRTHorizonal.texture;
+    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
     quadMesh.material.uniforms.uDirection.value = new Vector2(0., 1);
     renderer.setRenderTarget( sssBlurRTVertical );
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
-    bricksGroup.children.forEach(mesh => {
-        mesh.material = brickMaterial;
-        mesh.material.uniforms.tSSS.value = sssBlurRTVertical.texture;
-        mesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
-        mesh.scale.set(1., 1., 1.);
-    });
-    floorMesh.material.uniforms.tDepth.value = sssRadianceTarget.texture[1];
+    ///// Composite pass
+
+    quadMesh.material = compositeMaterial;
+    quadMesh.material.uniforms.tDiffuse_Id.value = mrtTarget.texture[0];
+    quadMesh.material.uniforms.tAlbedo.value = mrtTarget.texture[3];
+    quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
+    quadMesh.material.uniforms.tSSS.value = sssBlurRTVertical.texture;
     renderer.setRenderTarget(null);
-    renderer.render( scene, camera );
+    renderer.render( quadMesh, camera );
 }
 
 // This function moves the virtual movement plane for the mouseJoint to move in

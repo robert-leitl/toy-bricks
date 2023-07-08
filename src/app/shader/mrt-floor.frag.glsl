@@ -1,15 +1,18 @@
-uniform sampler2D tDepth;
-uniform vec2 resolution;
+uniform mat4 projectionMatrix;
 
 in vec3 vNormal;
 in vec2 vUv;
 
-out vec4 outColor;
+layout(location = 0) out vec4 outDiffuse_Id;
+layout(location = 1) out float outDepth;
+layout(location = 2) out vec4 outNormal_Specular;
+layout(location = 3) out vec4 outAlbedo;
 
+#include "utils.glsl"
 
 void main(void) {
   float mask = length(vUv * 2. - 1.);
-  vec3 color = vec3(mask * 0.3 + 0.7);
+  vec3 diffuseColor = vec3(mask * 0.3 + 0.7);
 
   GeometricContext geometry;
   geometry.position = - vViewPosition;
@@ -20,25 +23,27 @@ void main(void) {
   DirectionalLight directionalLight = directionalLights[ 0 ];
 	DirectionalLightShadow directionalLightShadow = directionalLightShadows[ 0 ];
 	getDirectionalLightInfo( directionalLight, geometry, directLight );
+  vec3 N = geometry.normal;
 
   ReflectedLight reflectedLight;
   LambertMaterial material;
-  material.diffuseColor = color;
+  material.diffuseColor = diffuseColor;
   material.specularStrength = 100.;
   RE_Direct_Lambert( directLight, geometry, material, reflectedLight );
 
-  color = reflectedLight.directDiffuse;
+  vec3 diffuse = reflectedLight.directDiffuse;
 
   // apply shadow
   vec3 shadowColor = vec3(0, 0, 0);
   float shadowPower = .4;
   float shadowMask = getShadowMask();
-  color = mix(color, shadowColor, (1.0 - shadowMask) * shadowPower);
+  diffuse = mix(diffuse, shadowColor, (1.0 - shadowMask) * shadowPower);
 
-  outColor.rgb = mix(color, vec3(1.), vUv.y);
-  outColor.a = 1.;
+  outDiffuse_Id = vec4(diffuse, 0.);
 
-  #ifdef DITHERING
-  outColor.rgb = dithering(outColor.rgb);
-  #endif
+  outDepth = getNormalizedZPerspective(gl_FragCoord.z, projectionMatrix);
+
+  outNormal_Specular = vec4(N, 0.);
+
+  outAlbedo = vec4(1.);
 }
