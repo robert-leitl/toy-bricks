@@ -22,6 +22,8 @@ import { Matrix4 } from 'three';
 import { ShaderMaterial } from 'three';
 import { UniformsUtils } from 'three';
 import { WebGLMultipleRenderTargets } from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 
 import mrtBrickFrag from './shader/mrt-brick.frag.glsl';
 import mrtBrickVert from './shader/mrt-brick.vert.glsl';
@@ -73,7 +75,7 @@ var _isDev,
     viewportSize,
     canvasRect;
 
-var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial;
+var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
@@ -252,51 +254,6 @@ function setupScene(canvas) {
     `;
     };
 
-    /*
-    brickMaterial = new ShaderMaterial({
-        uniforms: UniformsUtils.merge([
-          {
-            tDiffuse: { value: mrtTarget.texture[ 0 ] },
-            tSSS: { value: sssBlurRTVertical.texture },
-            tDepth: { value: mrtTarget.texture[ 1 ] },
-            resolution: { value: new Vector2() },
-            uAlbedo: { value: new Vector3() }
-          },
-          THREE.UniformsLib.lights,
-        ]),
-        vertexShader: brickVert,
-        fragmentShader: brickFrag,
-        glslVersion: THREE.GLSL3,
-        lights: true,
-        dithering: true
-    });
-    brickMaterial.uniforms.tDiffuse.value = mrtTarget.texture[ 0 ];
-    brickMaterial.uniforms.tSSS.value = mrtTarget.texture[ 1 ];
-    brickMaterial.onBeforeCompile = (shader) => {
-    shader.vertexShader = `
-        #include <common>
-        #include <shadowmap_pars_vertex>
-        ${shader.vertexShader}
-    `;
-    shader.fragmentShader = `
-        #include <common>
-        #include <packing>
-        #include <bsdfs>
-        #include <lights_pars_begin>
-        #include <lights_lambert_pars_fragment>
-        #include <shadowmap_pars_fragment>
-        #include <shadowmask_pars_fragment>
-        #include <dithering_pars_fragment>
-        ${shader.fragmentShader}
-    `;
-    };
-    brickMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
-        renderer.setRenderTarget(null);
-        brickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
-        brickMaterial.uniformsNeedUpate = true;
-    }
-    */
-
     mrtBrickMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {
@@ -341,7 +298,8 @@ function setupScene(canvas) {
             tDiffuse_Id: { value: null },
             tAlbedo: { value: null },
             tNormal_Specular: { value: null },
-            tSSS: { value: null }
+            tSSS: { value: null },
+            tSSAO: { value: null }
         },
         vertexShader: quadVert,
         fragmentShader: compositeFrag,
@@ -378,6 +336,21 @@ function setupScene(canvas) {
         mesh.layers.enable(5);
     });
     bricksGroup.layers.enable(5);
+
+
+    /////// Effect Composer
+
+    composer = new EffectComposer( renderer );
+    composer.renderToScreen = false;
+
+    ssaoPass = new SSAOPass( scene, camera, viewportSize.x, viewportSize.y );
+    ssaoPass.kernelRadius = 16;
+    ssaoPass.kernelRadius = 0.25;
+    ssaoPass.minDistance = 0.005;
+    ssaoPass.maxDistance = 0.02;
+    composer.addPass( ssaoPass );
+
+    console.log(ssaoPass);
 
     setupPhysicsScene();
 
@@ -604,6 +577,9 @@ function resize() {
 
         mrtTarget.setSize(viewportSize.x, viewportSize.y);
 
+        composer.setSize(viewportSize.x, viewportSize.y);
+        ssaoPass.setSize(viewportSize.x, viewportSize.y);
+
         blurSize = viewportSize.clone().multiplyScalar(blurScale);
         sssBlurRTHorizonal.setSize(blurSize.x, blurSize.y);
         sssBlurRTVertical.setSize(blurSize.x, blurSize.y);
@@ -664,6 +640,10 @@ function render() {
     renderer.clear(true, true);
     renderer.render( quadMesh, camera );
 
+    ///// SSAO pass
+
+    composer.render();
+
     ///// Composite pass
 
     quadMesh.material = compositeMaterial;
@@ -671,6 +651,7 @@ function render() {
     quadMesh.material.uniforms.tAlbedo.value = mrtTarget.texture[3];
     quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
     quadMesh.material.uniforms.tSSS.value = sssBlurRTVertical.texture;
+    quadMesh.material.uniforms.tSSAO.value = ssaoPass.blurRenderTarget.texture;
     renderer.setRenderTarget(null);
     renderer.render( quadMesh, camera );
 }

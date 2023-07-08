@@ -2,6 +2,7 @@ uniform sampler2D tDiffuse_Id;
 uniform sampler2D tAlbedo;
 uniform sampler2D tNormal_Specular;
 uniform sampler2D tSSS;
+uniform sampler2D tSSAO;
 
 out vec4 outColor;
 
@@ -43,6 +44,7 @@ void main() {
     vec3 diffuse = diffuseId.rgb;
     float specular = normalSpecular.w;
     vec4 sss = texture(tSSS, vUv);
+    vec4 ssao = texture(tSSAO, vUv * vec2(1., 1.));
 
     albedo = rgb2hsv(albedo);
     albedo.r -= .14;
@@ -55,6 +57,8 @@ void main() {
     vec3 color = blendLighten(diffuse, sss.rgb);
     color = color + specular;
 
+    color *= ssao.r * 0.8 + 0.2;
+
     // color correction
     color = color * pow(2., .2);
     color = mix(color, vec3(dot(vec3(.3, .59, .11), color)), .3);
@@ -63,6 +67,7 @@ void main() {
     //outColor = texture(tSSS, vUv);
     //outColor = sss;
     //outColor = vec4(diffuse, 1.);
+    //outColor = ssao;
 
     #ifdef DITHERING
     outColor.rgb = dithering(outColor.rgb);
