@@ -95,9 +95,10 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
     _isDev = isDev;
     _pane = pane;
 
-
-    pane.addInput(settings, 'enableSSS', { label: 'SSS' });
-    pane.addInput(settings, 'enableSSAO', { label: 'SSAO' });
+    if (pane) {
+        pane.addInput(settings, 'enableSSS', { label: 'SSS' });
+        pane.addInput(settings, 'enableSSAO', { label: 'SSAO' });
+    }
 
 
     const manager = new LoadingManager();

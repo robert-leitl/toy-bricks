@@ -2,9 +2,30 @@ html, body, canvas {
     width: 100%;
     height: 100%;
     margin: 0;
+    font-family: Arial,"Helvetica Neue",Helvetica,sans-serif; 
+    font-size: 18px;
+    overflow: hidden;
+    touch-action: none;
 }
 
 /*canvas {
     width: 100vw;
     height: 100vh;
 }*/
+
+.github-link {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    color: #aaa;
+    mix-blend-mode: difference;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 0.7em 1em;
+    font-size: 0.8em;
+}
+
+.tp-dfwv {
+  width: 320px !important;
+  font-size: 0.9em;
+}
