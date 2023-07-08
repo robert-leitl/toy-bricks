@@ -80,6 +80,7 @@ var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
 const blurScale = 1.;
+const ssaoScale = 0.5;
 
 const albedoColors = [
     new Vector3(0.17, 0.12, .17),
@@ -344,7 +345,7 @@ function setupScene(canvas) {
     composer.renderToScreen = false;
 
     ssaoPass = new SSAOPass( scene, camera, viewportSize.x, viewportSize.y );
-    ssaoPass.kernelRadius = 16;
+    ssaoPass.kernelRadius = 8;
     ssaoPass.kernelRadius = 0.25;
     ssaoPass.minDistance = 0.005;
     ssaoPass.maxDistance = 0.02;
@@ -577,8 +578,9 @@ function resize() {
 
         mrtTarget.setSize(viewportSize.x, viewportSize.y);
 
-        composer.setSize(viewportSize.x, viewportSize.y);
-        ssaoPass.setSize(viewportSize.x, viewportSize.y);
+        const ssaoSize = viewportSize.clone().multiplyScalar(ssaoScale);
+        composer.setSize(ssaoSize.x, ssaoSize.y);
+        ssaoPass.setSize(ssaoSize.x, ssaoSize.y);
 
         blurSize = viewportSize.clone().multiplyScalar(blurScale);
         sssBlurRTHorizonal.setSize(blurSize.x, blurSize.y);
