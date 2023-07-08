@@ -50,6 +50,8 @@ var frames = 0;
 var deltaFrames = 0;
 
 const settings = {
+    enableSSAO: true,
+    enableSSS: true
 }
 
 // module variables
@@ -80,7 +82,7 @@ var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
 const blurScale = 1.;
-const ssaoScale = 0.5;
+const ssaoScale = 0.25;
 
 const albedoColors = [
     new Vector3(0.17, 0.12, .17),
@@ -92,6 +94,11 @@ const albedoColors = [
 function init(canvas, onInit = null, isDev = false, pane = null) {
     _isDev = isDev;
     _pane = pane;
+
+
+    pane.addInput(settings, 'enableSSS', { label: 'SSS' });
+    pane.addInput(settings, 'enableSSAO', { label: 'SSAO' });
+
 
     const manager = new LoadingManager();
 
@@ -321,9 +328,6 @@ function setupScene(canvas) {
 
 
 
-
-
-
     const quadGeo = new THREE.BufferGeometry();
     quadGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( [ - 1, 3, 0, - 1, - 1, 0, 3, - 1, 0 ], 3 ) );
     quadGeo.setAttribute( 'uv', new THREE.Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
@@ -345,7 +349,7 @@ function setupScene(canvas) {
     composer.renderToScreen = false;
 
     ssaoPass = new SSAOPass( scene, camera, viewportSize.x, viewportSize.y );
-    ssaoPass.kernelRadius = 8;
+    ssaoPass.kernelRadius = 6;
     ssaoPass.kernelRadius = 0.25;
     ssaoPass.minDistance = 0.005;
     ssaoPass.maxDistance = 0.02;
@@ -612,39 +616,52 @@ function render() {
     renderer.clear();
     renderer.render(scene, camera);
 
-    ///// SSS blur passes
+    if (!settings.enableSSS) {
+        renderer.setRenderTarget( sssBlurRTVertical );
+        renderer.setClearColor(0x000000);
+        renderer.clear(true, true);
+    } else {
 
-    quadMesh.material = sssBlurMaterial;
-    quadMesh.material.uniforms.tDiffuse_Id.value = mrtTarget.texture[0];
-    quadMesh.material.uniforms.tDepth.value = mrtTarget.texture[1];
-    quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
-    quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
-    quadMesh.material.uniforms.resolution.value = blurSize;
-    renderer.setRenderTarget( sssBlurRTHorizonal );
-    renderer.clear(true, true);
-    renderer.render( quadMesh, camera );
+        ///// SSS blur passes
 
-    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
-    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
-    renderer.setRenderTarget( sssBlurRTVertical );
-    renderer.clear(true, true);
-    renderer.render( quadMesh, camera );
+        quadMesh.material = sssBlurMaterial;
+        quadMesh.material.uniforms.tDiffuse_Id.value = mrtTarget.texture[0];
+        quadMesh.material.uniforms.tDepth.value = mrtTarget.texture[1];
+        quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
+        quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
+        quadMesh.material.uniforms.resolution.value = blurSize;
+        renderer.setRenderTarget( sssBlurRTHorizonal );
+        renderer.clear(true, true);
+        renderer.render( quadMesh, camera );
 
-    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTVertical.texture;
-    quadMesh.material.uniforms.uDirection.value = new Vector2(1, 0);
-    renderer.setRenderTarget( sssBlurRTHorizonal );
-    renderer.clear(true, true);
-    renderer.render( quadMesh, camera );
+        quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
+        quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
+        renderer.setRenderTarget( sssBlurRTVertical );
+        renderer.clear(true, true);
+        renderer.render( quadMesh, camera );
 
-    quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
-    quadMesh.material.uniforms.uDirection.value = new Vector2(0., 1);
-    renderer.setRenderTarget( sssBlurRTVertical );
-    renderer.clear(true, true);
-    renderer.render( quadMesh, camera );
+        quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTVertical.texture;
+        quadMesh.material.uniforms.uDirection.value = new Vector2(1, 0);
+        renderer.setRenderTarget( sssBlurRTHorizonal );
+        renderer.clear(true, true);
+        renderer.render( quadMesh, camera );
+
+        quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
+        quadMesh.material.uniforms.uDirection.value = new Vector2(0., 1);
+        renderer.setRenderTarget( sssBlurRTVertical );
+        renderer.clear(true, true);
+        renderer.render( quadMesh, camera );
+    }
 
     ///// SSAO pass
 
-    composer.render();
+    if (settings.enableSSAO) {
+        composer.render();
+    } else {
+        renderer.setRenderTarget(ssaoPass.blurRenderTarget);
+        renderer.setClearColor(0xffffff);
+        renderer.clear();
+    }
 
     ///// Composite pass
 
