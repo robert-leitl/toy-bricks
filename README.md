@@ -6,6 +6,6 @@
 
 Primitive, unoptimized and artist unfriendly implementation of screen space subsurface scattering using two gaussian blur passes on the diffuse channel.
 
-### Features
+### Features 
 - [cannon-es](https://pmndrs.github.io/cannon-es/docs/) physics engine
 - Basic screen space subsurface scattering inspered by [Screen-Space Perceptual Rendering of Human Skin](http://www.iryoku.com/sssss/)
