@@ -1,8 +1,10 @@
+uniform sampler2D tDotNormalMap;
 uniform mat4 projectionMatrix;
 uniform vec3 uAlbedo;
 uniform uint uId;
 
 in vec3 vNormal;
+in vec3 vTangent;
 in vec2 vUv;
 
 layout(location = 0) out vec4 outDiffuse_Id;
@@ -41,6 +43,9 @@ void main(void) {
   vec3 N = geometry.normal;
   vec3 L = directLight.direction;
   vec3 V = geometry.viewDir;
+  vec3 T = normalize(vTangent);
+  vec3 B = cross(N, T);
+  mat3 tangentSpace = mat3(T, B, N);
 
   ReflectedLight reflectedLight;
   LambertMaterial material;
@@ -57,18 +62,17 @@ void main(void) {
 
   diffuse = diffuse * 0.5 + albedo * 0.4; // add a little bit ambient
 
-  float grid = 80.;
-  float thickness = 0.4;
+  float grid = 50.;
+  float thickness = 0.25;
   float delta = 0.05;
-  float stripesH = smoothstep(0., delta, sin(vUv.x * grid)) * (1. - smoothstep(thickness, thickness + delta, sin(vUv.x * grid)));
-  float stripesV = smoothstep(0., delta, sin(vUv.y * grid)) * (1. - smoothstep(thickness, thickness + delta, sin(vUv.y * grid)));
-  float stripes = 1. - (stripesH * stripesV * 4.);
-  float dots = 1. - (1. - smoothstep(0.2, 0.25, length(fract(vUv * grid) * 2. - 1.))) * 2.;
-
+  vec2 dotUv = fract(vUv * grid);
+  float dots = 1. - (1. - smoothstep(thickness, thickness + delta, length(dotUv * 2. - 1.))) * 1.5;
+  vec3 dotNormal = normalize(texture(tDotNormalMap, dotUv).xyz * 2. - 1.);
+  dotNormal = tangentSpace * dotNormal;
 
 	float fresnel = 1. - saturate( dot( V, N ) );
-  vec3 specularNormal = normalize(N + nNoise * .4);
-  float specular = BRDF_BlinnPhong(L, V, specularNormal, vec3(1.), 5.).r;
+  vec3 specularNormal = normalize(tangentSpace * (N + nNoise * .7) + dotNormal * .4);
+  float specular = BRDF_BlinnPhong(tangentSpace * L, tangentSpace * V, specularNormal, vec3(1.), 5.).r;
   specular = specular * (shadowMask * 0.8 + 0.2);
   specular = specular * 0.7 + fresnel * 0.05;
 

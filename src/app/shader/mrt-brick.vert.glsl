@@ -1,4 +1,5 @@
 out vec3 vNormal;
+out vec3 vTangent;
 out vec2 vUv;
 out vec3 vViewPosition;
 
@@ -12,5 +13,6 @@ void main() {
 
   vec3 transformedNormal = normalMatrix * normal;
   vNormal = normalize(normalMatrix * normal);
+  vTangent = normalize(normalMatrix * tangent.xyz);
   #include <shadowmap_vertex>
 }

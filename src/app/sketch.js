@@ -78,7 +78,7 @@ var _isDev,
     viewportSize,
     canvasRect;
 
-var mrtBrickMaterial, mrtTarget, quadMesh, sssDilationMaterial, sssDilationRT, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
+var mrtBrickMaterial, mrtTarget, quadMesh, sssDilationMaterial, sssDilationRT, sssBlurRTHorizonal, dotNormalMap, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
@@ -111,7 +111,16 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
         glbScene = (gltf.scene)
     });
 
+    dotNormalMap = new THREE.TextureLoader(manager).load(new URL('../assets/dot.png', import.meta.url));
+
     manager.onLoad = () => {
+        dotNormalMap.wrapS = THREE.ClampToEdgeWrapping;
+        dotNormalMap.wrapW = THREE.ClampToEdgeWrapping;
+        dotNormalMap.magFilter = THREE.NearestFilter;
+        dotNormalMap.minFilter = THREE.NearestFilter;
+
+        console.log(glbScene);
+
         setupScene(canvas);
 
         if (onInit) onInit(this);
@@ -188,8 +197,8 @@ function setupScene(canvas) {
 
     // Movement plane when dragging
     const planeGeometry = new PlaneGeometry(100, 100)
-    movementPlane = new Mesh(planeGeometry, new MeshBasicMaterial());
-    movementPlane.rotation.x = -Math.PI / 2;
+    movementPlane = new Mesh(planeGeometry, overrideMaterial);
+    movementPlane.rotation.x = Math.PI / 2;
     movementPlane.visible = false;
     scene.add(movementPlane);
 
@@ -282,11 +291,15 @@ function setupScene(canvas) {
     mrtBrickMaterial = new ShaderMaterial({
         uniforms: UniformsUtils.merge([
           {
+            tDotNormalMap: { value: dotNormalMap },
             uAlbedo: { value: new Vector3(0.15, 0.35, .9) },
             uId: { value: 1 }
           },
           THREE.UniformsLib.lights,
         ]),
+        defines: {
+            USE_TANGENT: true
+        },
         vertexShader: mrtBrickVert,
         fragmentShader: mrtBrickFrag,
         glslVersion: THREE.GLSL3,
@@ -753,7 +766,7 @@ function addJointConstraint(position, constrainedBody) {
     world.addConstraint(jointConstraint)
 
     //dragSpring.bodyB = constrainedBody;
-    dragSpring.localAnchorB = pivot;
+    //dragSpring.localAnchorB = pivot;
 }
 
 // This functions moves the joint body to a new postion in space
@@ -762,7 +775,7 @@ function moveJoint(position, pointerPos) {
     const pointerDelta = pointerPos.sub(pointerDownPos);
     const pY = pointerDelta.y * 2;
     const zOffset = pY * pY * pY;
-    position.z -= zOffset;
+    //position.z -= zOffset;
 
     const bounds = boundingBox.clone();
     bounds.clampPoint(position, position);
