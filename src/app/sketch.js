@@ -30,6 +30,7 @@ import mrtBrickVert from './shader/mrt-brick.vert.glsl';
 import mrtFloorVert from './shader/mrt-floor.vert.glsl';
 import mrtFloorFrag from './shader/mrt-floor.frag.glsl';
 import quadVert from './shader/quad.vert.glsl';
+import sssDilationFrag from './shader/sss-dilation.frag.glsl';
 import sssBlurFrag from './shader/sss-blur.frag.glsl';
 import compositeFrag from './shader/composite.frag.glsl';
 
@@ -77,18 +78,20 @@ var _isDev,
     viewportSize,
     canvasRect;
 
-var mrtBrickMaterial, mrtTarget, quadMesh, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
+var mrtBrickMaterial, mrtTarget, quadMesh, sssDilationMaterial, sssDilationRT, sssBlurRTHorizonal, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
-const blurScale = 1.;
-const ssaoScale = 0.25;
+const overrideMaterial = new MeshBasicMaterial();
+
+const blurScale = .5;
+const ssaoScale = .25;
 
 const albedoColors = [
-    new Vector3(0.17, 0.12, .17),
-    new Vector3(0.4, 0.3, .8),
-    new Vector3(0.8, 0.18, .18),
+    //new Vector3(0.8, 0.18, .18),
+    new Vector3(0.15, 0.58, .88),
     new Vector3(0.15, 0.38, .98),
+    new Vector3(0.3, 0.7, .2),
 ]
 
 function init(canvas, onInit = null, isDev = false, pane = null) {
@@ -130,20 +133,20 @@ function setupScene(canvas) {
     //sceneBox.min.z *= 0.3;
     //sceneBox.max.multiplyScalar(0.7);
 
+    floorMesh.scale.set(10, 1, 10);
+
     camera = new THREE.PerspectiveCamera( 20, window.innerWidth / window.innerHeight, 6, 96 );
     //camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 5, 20);
-    camera.position.set(0, 18, 25);
+    camera.position.set(0, 19, 25);
     camera.lookAt(new Vector3());
     const nearPoint = (new Vector3(0, sceneBox.max.y, sceneBox.max.z)).applyMatrix4(camera.matrixWorldInverse);
     const farPoint = (new Vector3(0, sceneBox.min.y, sceneBox.min.z)).applyMatrix4(camera.matrixWorldInverse);
     camera.near = nearPoint.length();
     camera.far = farPoint.length();
-    console.log(nearPoint.length(), farPoint.length());
     
 
     scene = new THREE.Scene();
     scene.add(glbScene);
-    scene.background = 0xffffff;
     const light = new DirectionalLight();
     light.position.set(-10, 10, 0);
     light.intensity = 2;
@@ -223,12 +226,25 @@ function setupScene(canvas) {
             tDepth: { value: mrtTarget.texture[ 1 ] },
             tNormal_Specular: { value: mrtTarget.texture[ 2 ] },
             resolution: { value: new Vector2() },
-            uDirection: { value: 0 }
+            uDirection: { value: 0 },
+            uFBOScale: { value: blurScale }
         },
         THREE.UniformsLib.lights,
         ]),
         vertexShader: quadVert,
         fragmentShader: sssBlurFrag,
+        glslVersion: THREE.GLSL3,
+    });
+
+    sssDilationMaterial = new ShaderMaterial({
+        uniforms: 
+        {
+            tDiffuse_Id: { value: mrtTarget.texture[ 0 ] },
+            resolution: { value: new Vector2() },
+            uDirection: { value: 0 }
+        },
+        vertexShader: quadVert,
+        fragmentShader: sssDilationFrag,
         glslVersion: THREE.GLSL3,
     });
 
@@ -297,7 +313,7 @@ function setupScene(canvas) {
     };
     mrtBrickMaterial.onBeforeRender = (renderer, scene, camera, geometry, object, group) => {
         renderer.setRenderTarget(mrtTarget);
-        mrtBrickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx]);
+        mrtBrickMaterial.uniforms.uAlbedo.value = (albedoColors[object.userData.ndx % albedoColors.length]);
         mrtBrickMaterial.uniforms.uId.value = object.userData.ndx + 1;
         mrtBrickMaterial.uniformsNeedUpate = true;
     }
@@ -355,8 +371,6 @@ function setupScene(canvas) {
     ssaoPass.minDistance = 0.005;
     ssaoPass.maxDistance = 0.02;
     composer.addPass( ssaoPass );
-
-    console.log(ssaoPass);
 
     setupPhysicsScene();
 
@@ -428,19 +442,27 @@ function setupPhysicsScene() {
         const dim = brickBoundingBox.max.sub(brickBoundingBox.min);
         dim.multiplyScalar(0.48);
 
-        let shape;
-        if (mesh.name.indexOf('cylinder') !== -1) {
-            shape = new CANNON.Cylinder(dim.x, dim.z, dim.y * 2, 20);
-        } else {
-            shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z))
-        }
-
         const brickBody = new CANNON.Body({
             mass: 1,
-            shape,
             angularDamping: .94,
             linearDamping: 0.1
         });
+
+        let shape;
+        if (mesh.name.indexOf('cylinder') !== -1) {
+            shape = new CANNON.Cylinder(dim.x, dim.z, dim.y * 2, 20);
+            brickBody.addShape(shape);
+        } else if (mesh.name.indexOf('plus') !== -1) {
+            shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y / 4, dim.z))
+            brickBody.addShape(shape);
+            shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z / 4))
+            brickBody.addShape(shape);
+        } else {
+            shape = new CANNON.Box(new CANNON.Vec3(dim.x, dim.y, dim.z))
+            brickBody.addShape(shape);
+        }
+
+        
         brickBody.position.copy(mesh.position);
         brickBody.quaternion.copy(mesh.quaternion);
         world.addBody(brickBody);
@@ -604,8 +626,10 @@ function animate() {
 
     brickMeshes.forEach((mesh, ndx) => {
         const body = brickBodies[ndx];
-        mesh.position.copy(body.position);
-        mesh.quaternion.copy(body.quaternion);
+        if (body) {
+            mesh.position.copy(body.position);
+            mesh.quaternion.copy(body.quaternion);
+        }
     });
 }
 
@@ -614,13 +638,14 @@ function render() {
     ///// MRT pass
 
     renderer.setRenderTarget(mrtTarget);
+    renderer.setClearColor(new THREE.Color(0.18, 0.18, 0.18));
+    renderer.setClearAlpha(0.14);
     renderer.clear();
     renderer.render(scene, camera);
 
     if (!settings.enableSSS) {
         renderer.setRenderTarget( sssBlurRTVertical );
-        renderer.setClearColor(0x000000);
-        renderer.clear(true, true);
+        renderer.clear();
     } else {
 
         ///// SSS blur passes
@@ -630,13 +655,14 @@ function render() {
         quadMesh.material.uniforms.tDepth.value = mrtTarget.texture[1];
         quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
         quadMesh.material.uniforms.uDirection.value = new Vector2(3, 0);
-        quadMesh.material.uniforms.resolution.value = blurSize;
+        quadMesh.material.uniforms.resolution.value = viewportSize;
         renderer.setRenderTarget( sssBlurRTHorizonal );
         renderer.clear(true, true);
         renderer.render( quadMesh, camera );
 
         quadMesh.material.uniforms.tDiffuse_Id.value = sssBlurRTHorizonal.texture;
         quadMesh.material.uniforms.uDirection.value = new Vector2(0., 3);
+        quadMesh.material.uniforms.resolution.value = blurSize;
         renderer.setRenderTarget( sssBlurRTVertical );
         renderer.clear(true, true);
         renderer.render( quadMesh, camera );
@@ -657,12 +683,15 @@ function render() {
     ///// SSAO pass
 
     if (settings.enableSSAO) {
+        scene.overrideMaterial = overrideMaterial;
         composer.render();
+        scene.overrideMaterial = null;
     } else {
         renderer.setRenderTarget(ssaoPass.blurRenderTarget);
         renderer.setClearColor(0xffffff);
         renderer.clear();
     }
+    
 
     ///// Composite pass
 

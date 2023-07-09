@@ -57,14 +57,15 @@ void main() {
     vec3 color = blendLighten(diffuse, sss.rgb);
     color = color + specular;
 
-    color *= ssao.r * 0.8 + 0.2;
+    color *= ssao.r;
 
     // color correction
-    color = color * pow(2., .2);
-    color = mix(color, vec3(dot(vec3(.3, .59, .11), color)), .3);
+    color = color * pow(2., .1);
+    color = mix(color, vec3(dot(vec3(.3, .59, .11), color)), .2);
 
     outColor = vec4(color, 1.);
     //outColor = texture(tSSS, vUv);
+    //outColor.a = 1.;
     //outColor = sss;
     //outColor = vec4(diffuse, 1.);
     //outColor = ssao;

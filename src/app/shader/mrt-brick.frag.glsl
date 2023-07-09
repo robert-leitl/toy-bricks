@@ -57,17 +57,26 @@ void main(void) {
 
   diffuse = diffuse * 0.5 + albedo * 0.4; // add a little bit ambient
 
+  float grid = 80.;
+  float thickness = 0.4;
+  float delta = 0.05;
+  float stripesH = smoothstep(0., delta, sin(vUv.x * grid)) * (1. - smoothstep(thickness, thickness + delta, sin(vUv.x * grid)));
+  float stripesV = smoothstep(0., delta, sin(vUv.y * grid)) * (1. - smoothstep(thickness, thickness + delta, sin(vUv.y * grid)));
+  float stripes = 1. - (stripesH * stripesV * 4.);
+  float dots = 1. - (1. - smoothstep(0.2, 0.25, length(fract(vUv * grid) * 2. - 1.))) * 2.;
+
+
 	float fresnel = 1. - saturate( dot( V, N ) );
   vec3 specularNormal = normalize(N + nNoise * .4);
   float specular = BRDF_BlinnPhong(L, V, specularNormal, vec3(1.), 5.).r;
   specular = specular * (shadowMask * 0.8 + 0.2);
   specular = specular * 0.7 + fresnel * 0.05;
 
-  outDiffuse_Id = vec4(diffuse, uId);
+  outDiffuse_Id = vec4(diffuse, float(uId) / 255.);
 
   outDepth = getNormalizedZPerspective(gl_FragCoord.z, projectionMatrix);
 
-  outNormal_Specular = vec4(N, specular);
+  outNormal_Specular = vec4(N, specular * dots);
 
   outAlbedo = vec4(albedo, 1.);
 }

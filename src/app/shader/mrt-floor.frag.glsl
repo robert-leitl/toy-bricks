@@ -12,7 +12,7 @@ layout(location = 3) out vec4 outAlbedo;
 
 void main(void) {
   float mask = length(vUv * 2. - 1.);
-  vec3 diffuseColor = vec3(mask * 0.3 + 0.7);
+  vec3 diffuseColor = vec3(mask * 0.4 + 0.6) * .15;
 
   GeometricContext geometry;
   geometry.position = - vViewPosition;
@@ -46,4 +46,8 @@ void main(void) {
   outNormal_Specular = vec4(N, 0.);
 
   outAlbedo = vec4(1.);
+
+  #ifdef DITHERING
+  outDiffuse_Id.rgb = dithering(outDiffuse_Id.rgb);
+  #endif
 }
