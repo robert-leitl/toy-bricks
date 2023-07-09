@@ -1,6 +1,6 @@
 # Toy Bricks
 
-![Toy Bricks Screenshot](https://github.com/robert-leitl/toy-bricks/blob/main/cover.jpg?raw=true)
+![Toy Bricks Screenshot](https://github.com/robert-leitl/toy-bricks/blob/main/cover_.jpg?raw=true)
 
 [DEMO](https://robert-leitl.github.io/toy-bricks/dist/?debug=true)
 
