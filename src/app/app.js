@@ -18,7 +18,7 @@ if (hasDebugParam || isDev) {
 }
 
 const stats = new Stats();
-if (isDev) {
+if (hasDebugParam || isDev) {
   stats.showPanel(0);
   document.body.appendChild(stats.dom);
   const updateStats = () => {

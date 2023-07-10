@@ -44,7 +44,7 @@ void main() {
     vec3 diffuse = diffuseId.rgb;
     float specular = normalSpecular.w;
     vec4 sss = texture(tSSS, vUv);
-    vec4 ssao = texture(tSSAO, vUv * vec2(1., 1.));
+    vec4 ssao = texture(tSSAO, vUv);
 
     albedo = rgb2hsv(albedo);
     albedo.r -= .14;

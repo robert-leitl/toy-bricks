@@ -33,6 +33,7 @@ import quadVert from './shader/quad.vert.glsl';
 import sssDilationFrag from './shader/sss-dilation.frag.glsl';
 import sssBlurFrag from './shader/sss-blur.frag.glsl';
 import compositeFrag from './shader/composite.frag.glsl';
+import { CustomSSAOPass } from './ssao/custom-ssao-pass';
 
 // the target duration of one frame in milliseconds
 const TARGET_FRAME_DURATION_MS = 16;
@@ -78,14 +79,14 @@ var _isDev,
     viewportSize,
     canvasRect;
 
-var mrtBrickMaterial, mrtTarget, quadMesh, sssDilationMaterial, sssDilationRT, sssBlurRTHorizonal, dotNormalMap, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, composer, ssaoPass;
+var mrtBrickMaterial, mrtTarget, quadMesh, sssDilationMaterial, sssDilationRT, sssBlurRTHorizonal, ssaoRT, dotNormalMap, sssBlurRTVertical, blurSize, compositeMaterial, sssBlurMaterial, ssaoPass;
 
 var world, dragSpring, brickBodies, isDragging = false, jointBody, jointConstraint, pointerDownPos;
 
 const overrideMaterial = new MeshBasicMaterial();
 
 const blurScale = .5;
-const ssaoScale = .25;
+const ssaoScale = .5;
 
 const albedoColors = [
     //new Vector3(0.8, 0.18, .18),
@@ -208,7 +209,7 @@ function setupScene(canvas) {
         viewportSize.y,
         4,
         {
-            samples: 4
+            samples: 4,
         }
     );
     mrtTarget.texture[0].name = 'RGB_diffuse_A_id';
@@ -223,6 +224,9 @@ function setupScene(canvas) {
     blurSize = viewportSize.clone().multiplyScalar(blurScale);
     sssBlurRTHorizonal = new THREE.WebGLRenderTarget( blurSize.x, blurSize.y, { });
     sssBlurRTVertical = new THREE.WebGLRenderTarget( blurSize.x, blurSize.y, { });
+
+    const ssaoSize = viewportSize.clone().multiplyScalar(ssaoScale)
+    ssaoRT = new THREE.WebGLRenderTarget( ssaoSize.x, ssaoSize.y, { });
 
     //////////
 
@@ -373,15 +377,22 @@ function setupScene(canvas) {
 
     /////// Effect Composer
 
-    composer = new EffectComposer( renderer );
-    composer.renderToScreen = false;
 
-    ssaoPass = new SSAOPass( scene, camera, viewportSize.x, viewportSize.y );
+    ssaoPass = new CustomSSAOPass(
+        scene,
+        camera,
+        ssaoSize.x,
+        ssaoSize.y,
+        mrtTarget.texture[0],
+        mrtTarget.texture[2],
+        mrtTarget.texture[1]
+    );
+    ssaoPass.renderToScreen = false;
+    ssaoPass.output = CustomSSAOPass.OUTPUT.Default;
     ssaoPass.kernelRadius = 6;
     ssaoPass.kernelRadius = 0.25;
     ssaoPass.minDistance = 0.005;
     ssaoPass.maxDistance = 0.02;
-    composer.addPass( ssaoPass );
 
     setupPhysicsScene();
 
@@ -621,7 +632,7 @@ function resize() {
         mrtTarget.setSize(viewportSize.x, viewportSize.y);
 
         const ssaoSize = viewportSize.clone().multiplyScalar(ssaoScale);
-        composer.setSize(ssaoSize.x, ssaoSize.y);
+        ssaoRT.setSize(ssaoSize.x, ssaoSize.y);
         ssaoPass.setSize(ssaoSize.x, ssaoSize.y);
 
         blurSize = viewportSize.clone().multiplyScalar(blurScale);
@@ -699,10 +710,10 @@ function render() {
 
     if (settings.enableSSAO) {
         scene.overrideMaterial = overrideMaterial;
-        composer.render();
+        ssaoPass.render(renderer, ssaoRT, mrtTarget.texture[0], mrtTarget.texture[2], mrtTarget.texture[1]);
         scene.overrideMaterial = null;
     } else {
-        renderer.setRenderTarget(ssaoPass.blurRenderTarget);
+        renderer.setRenderTarget(ssaoRT);
         renderer.setClearColor(0xffffff);
         renderer.clear();
     }
@@ -715,7 +726,7 @@ function render() {
     quadMesh.material.uniforms.tAlbedo.value = mrtTarget.texture[3];
     quadMesh.material.uniforms.tNormal_Specular.value = mrtTarget.texture[2];
     quadMesh.material.uniforms.tSSS.value = sssBlurRTVertical.texture;
-    quadMesh.material.uniforms.tSSAO.value = ssaoPass.blurRenderTarget.texture;
+    quadMesh.material.uniforms.tSSAO.value = ssaoRT.texture;
     renderer.setRenderTarget(null);
     renderer.render( quadMesh, camera );
 }
