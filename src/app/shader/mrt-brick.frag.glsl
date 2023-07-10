@@ -44,7 +44,7 @@ void main(void) {
   vec3 L = directLight.direction;
   vec3 V = geometry.viewDir;
   vec3 T = normalize(vTangent);
-  vec3 B = cross(N, T);
+  vec3 B = cross(T, N);
   mat3 tangentSpace = mat3(T, B, N);
 
   ReflectedLight reflectedLight;
@@ -66,13 +66,13 @@ void main(void) {
   float thickness = 0.25;
   float delta = 0.05;
   vec2 dotUv = fract(vUv * grid);
-  float dots = 1. - (1. - smoothstep(thickness, thickness + delta, length(dotUv * 2. - 1.))) * 1.5;
+  float dots = 1. - (1. - smoothstep(thickness, thickness + delta, length(dotUv * 2. - 1.))) * 2.;
   vec3 dotNormal = normalize(texture(tDotNormalMap, dotUv).xyz * 2. - 1.);
   dotNormal = tangentSpace * dotNormal;
 
 	float fresnel = 1. - saturate( dot( V, N ) );
-  vec3 specularNormal = normalize(tangentSpace * (N + nNoise * .7) + dotNormal * .4);
-  float specular = BRDF_BlinnPhong(tangentSpace * L, tangentSpace * V, specularNormal, vec3(1.), 5.).r;
+  vec3 specularNormal = normalize((N + nNoise * .4) + dotNormal * 2.);
+  float specular = BRDF_BlinnPhong(L, V, specularNormal, vec3(1.), 5.).r;
   specular = specular * (shadowMask * 0.8 + 0.2);
   specular = specular * 0.7 + fresnel * 0.05;
 
