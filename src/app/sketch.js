@@ -215,11 +215,11 @@ function setupScene(canvas) {
     );
     mrtTarget.texture[0].name = 'RGB_diffuse_A_id';
 	mrtTarget.texture[1].name = 'normalized_linear_depth';
-    mrtTarget.texture[1].type = THREE.FloatType;
+    mrtTarget.texture[1].type = THREE.HalfFloatType;
     mrtTarget.texture[1].format = THREE.RedFormat;
     mrtTarget.texture[1].internalFormat = 'R32F';
 	mrtTarget.texture[2].name = 'XYZ_normal_W_specular';
-    mrtTarget.texture[2].type = THREE.FloatType;
+    mrtTarget.texture[2].type = THREE.HalfFloatType;
     mrtTarget.texture[3].name = 'albedo';
 
     blurSize = viewportSize.clone().multiplyScalar(blurScale);
