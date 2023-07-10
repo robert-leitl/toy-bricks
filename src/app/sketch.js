@@ -119,8 +119,6 @@ function init(canvas, onInit = null, isDev = false, pane = null) {
         dotNormalMap.magFilter = THREE.NearestFilter;
         dotNormalMap.minFilter = THREE.NearestFilter;
 
-        console.log(glbScene);
-
         setupScene(canvas);
 
         if (onInit) onInit(this);
@@ -217,7 +215,7 @@ function setupScene(canvas) {
 	mrtTarget.texture[1].name = 'normalized_linear_depth';
     mrtTarget.texture[1].type = THREE.HalfFloatType;
     mrtTarget.texture[1].format = THREE.RedFormat;
-    mrtTarget.texture[1].internalFormat = 'R32F';
+    mrtTarget.texture[1].internalFormat = 'R16F';
 	mrtTarget.texture[2].name = 'XYZ_normal_W_specular';
     mrtTarget.texture[2].type = THREE.HalfFloatType;
     mrtTarget.texture[3].name = 'albedo';
@@ -604,8 +602,12 @@ function run(t = 0) {
     deltaFrames = deltaTimeMS / TARGET_FRAME_DURATION_MS;
     frames += deltaFrames;
 
+    //console.time('toy-bricks-animate');
     animate();
+    //console.timeEnd('toy-bricks-animate');
+    //console.time('toy-bricks-render');
     render();
+    //console.timeEnd('toy-bricks-render');
 }
 
 function resize() {
