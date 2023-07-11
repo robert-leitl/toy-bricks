@@ -24,6 +24,7 @@ import { UniformsUtils } from 'three';
 import { WebGLMultipleRenderTargets } from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import * as platform from 'platform';
 
 import mrtBrickFrag from './shader/mrt-brick.frag.glsl';
 import mrtBrickVert from './shader/mrt-brick.vert.glsl';
@@ -204,12 +205,15 @@ function setupScene(canvas) {
 
     ////////// 
 
+    // disable multisampled framebuffer on windows due to experienced performance decreases
+    const samples = platform.os.family === "Windows" ? 0 : 2;
+
     mrtTarget = new WebGLMultipleRenderTargets(
         viewportSize.x,
         viewportSize.y,
         4,
         {
-            samples: 4,
+            samples,
         }
     );
     mrtTarget.texture[0].name = 'RGB_diffuse_A_id';
